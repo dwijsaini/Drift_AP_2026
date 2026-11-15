@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MembershipRole {
+  OWNER
+  EDITOR
+  VIEWER
+
+  @@map("membership_role")
+}
+
+enum ReadingSource {
+  MANUAL
+  IMPORT
+  API
+
+  @@map("reading_source")
+}
+
+model AppUser {
+  userId           BigInt          @id @default(autoincrement()) @map("user_id")
+  displayName      String          @map("display_name") @db.Text
+  email            String          @unique @db.Text
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  memberships      BuildingMember[]
+  recordedReadings EnergyPeriod[]  @relation("RecordedReadings")
+
+  @@map("app_users")
+}
+
+model Building {
+  buildingId  BigInt           @id @default(autoincrement()) @map("building_id")
+  name        String           @db.Text
+  address     String?          @db.Text
+  timezone    String           @default("UTC") @db.Text
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  memberships BuildingMember[]
+  periods     EnergyPeriod[]
+
+  @@map("buildings")
+}
+
+model BuildingMember {
+  buildingId BigInt         @map("building_id")
+  userId     BigInt         @map("user_id")
+  role       MembershipRole
+  joinedAt   DateTime       @default(now()) @map("joined_at") @db.Timestamptz(6)
+  building   Building       @relation(fields: [buildingId], references: [buildingId], onDelete: Cascade)
+  user       AppUser        @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@id([buildingId, userId])
+  @@index([userId, buildingId], map: "building_members_user_idx")
+  @@map("building_members")
+}
+
+model EnergyPeriod {
+  readingId           BigInt       @id @default(autoincrement()) @map("reading_id")
+  buildingId          BigInt       @map("building_id")
+  periodStart          DateTime     @map("period_start") @db.Timestamptz(6)
+  periodEnd            DateTime     @map("period_end") @db.Timestamptz(6)
+  generatedKwh         Decimal      @map("generated_kwh") @db.Decimal(12, 3)
+  consumedKwh          Decimal      @map("consumed_kwh") @db.Decimal(12, 3)
+  gridImportKwh        Decimal?     @map("grid_import_kwh") @db.Decimal(12, 3)
+  batteryChargeKwh     Decimal?     @map("battery_charge_kwh") @db.Decimal(12, 3)
+  batteryDischargeKwh  Decimal?     @map("battery_discharge_kwh") @db.Decimal(12, 3)
+  source               ReadingSource
+  recordedByUserId     BigInt?      @map("recorded_by_user_id")
+  createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  building             Building     @relation(fields: [buildingId], references: [buildingId], onDelete: Cascade)
+  recordedBy           AppUser?     @relation("RecordedReadings", fields: [recordedByUserId], references: [userId], onDelete: SetNull)
+
+  @@unique([buildingId, periodStart, periodEnd])
+  @@index([buildingId, periodStart(sort: Desc)], map: "energy_periods_building_time_idx")
+  @@index([recordedByUserId], map: "energy_periods_recorded_by_idx")
+  @@map("energy_periods")
+}
+
+// SQL CHECK constraints in dbms/03_schema.sql enforce nonnegative values,
+// valid period order, and nonempty names; Prisma schema syntax cannot declare them.

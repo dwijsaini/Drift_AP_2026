@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="680" viewBox="0 0 1100 680" role="img" aria-labelledby="title desc">
+  <title id="title">Drift database entity relationship diagram</title>
+  <desc id="desc">Users and buildings have a many-to-many relationship through memberships. Buildings have many energy periods, and users can record many periods.</desc>
+  <defs><style>
+    text{font-family:Arial,sans-serif;fill:#172033}.box{fill:#fff;stroke:#344866;stroke-width:2;rx:10}.head{fill:#eaf1fb;stroke:#344866;stroke-width:2;rx:10}.rel{stroke:#526781;stroke-width:2;fill:none}.label{font-size:15px;fill:#43536b}.title{font-size:18px;font-weight:bold}.field{font-size:14px}
+  </style></defs>
+  <text x="550" y="36" text-anchor="middle" class="title" style="font-size:24px">Drift — Solar Balance Monitor</text>
+  <rect class="head" x="70" y="90" width="280" height="48"/><rect class="box" x="70" y="138" width="280" height="142"/>
+  <text x="210" y="121" text-anchor="middle" class="title">APP_USERS</text>
+  <text x="90" y="168" class="field">PK  user_id</text><text x="90" y="194" class="field">display_name</text><text x="90" y="220" class="field">email (unique)</text><text x="90" y="246" class="field">created_at</text>
+  <rect class="head" x="410" y="90" width="280" height="48"/><rect class="box" x="410" y="138" width="280" height="166"/>
+  <text x="550" y="121" text-anchor="middle" class="title">BUILDING_MEMBERS</text>
+  <text x="430" y="168" class="field">PK, FK  building_id</text><text x="430" y="194" class="field">PK, FK  user_id</text><text x="430" y="220" class="field">role</text><text x="430" y="246" class="field">joined_at</text>
+  <rect class="head" x="750" y="90" width="280" height="48"/><rect class="box" x="750" y="138" width="280" height="190"/>
+  <text x="890" y="121" text-anchor="middle" class="title">BUILDINGS</text>
+  <text x="770" y="168" class="field">PK  building_id</text><text x="770" y="194" class="field">name</text><text x="770" y="220" class="field">address</text><text x="770" y="246" class="field">timezone</text><text x="770" y="272" class="field">created_at</text>
+  <rect class="head" x="350" y="410" width="400" height="48"/><rect class="box" x="350" y="458" width="400" height="190"/>
+  <text x="550" y="441" text-anchor="middle" class="title">ENERGY_PERIODS</text>
+  <text x="370" y="488" class="field">PK  reading_id; FK  building_id</text><text x="370" y="514" class="field">period_start, period_end (unique per building)</text><text x="370" y="540" class="field">generated_kwh, consumed_kwh</text><text x="370" y="566" class="field">grid_import_kwh, battery_charge_kwh, battery_discharge_kwh</text><text x="370" y="592" class="field">source; FK recorded_by_user_id; created_at</text><text x="370" y="618" class="field">gap and coverage are derived in queries</text>
+  <path class="rel" d="M350 210 H410 M690 210 H750 M890 328 V360 H750 V530 M210 280 V360 H350 V570"/>
+  <text x="375" y="198" class="label">1</text><text x="386" y="198" class="label">0..*</text>
+  <text x="710" y="198" class="label">0..*</text><text x="720" y="198" class="label">1</text>
+  <text x="762" y="350" class="label">1 building → many periods</text><text x="120" y="350" class="label">1 user → many recorded periods</text>
+  <text x="74" y="632" class="label">A user can belong to many buildings; a building can have many members.</text>
+</svg>
