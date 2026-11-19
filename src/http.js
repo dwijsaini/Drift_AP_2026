@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const idSchema = z.coerce.bigint().positive();
 export const dateSchema = z.iso.datetime({ offset: true });
-export const readingSchema = z.object({
+export const readingFieldsSchema = z.object({
   periodStart: dateSchema,
   periodEnd: dateSchema,
   generatedKwh: z.coerce.number().finite().nonnegative(),
@@ -11,7 +11,8 @@ export const readingSchema = z.object({
   batteryChargeKwh: z.coerce.number().finite().nonnegative().nullable().optional(),
   batteryDischargeKwh: z.coerce.number().finite().nonnegative().nullable().optional(),
   source: z.enum(['MANUAL', 'IMPORT', 'API']).default('MANUAL')
-}).refine(v => Date.parse(v.periodEnd) > Date.parse(v.periodStart), {
+});
+export const readingSchema = readingFieldsSchema.refine(v => Date.parse(v.periodEnd) > Date.parse(v.periodStart), {
   message: 'periodEnd must be after periodStart', path: ['periodEnd']
 });
 

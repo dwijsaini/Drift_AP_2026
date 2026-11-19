@@ -4,7 +4,7 @@ import { stringify } from 'csv-stringify/sync';
 import { Prisma } from '@prisma/client';
 import { prisma } from './db.js';
 import { requireBuildingMember, requireUser } from './auth.js';
-import { asyncRoute, idSchema, readingSchema, validate } from './http.js';
+import { asyncRoute, idSchema, readingFieldsSchema, readingSchema, validate } from './http.js';
 import { z } from 'zod';
 
 export const router = Router();
@@ -70,7 +70,7 @@ router.patch('/buildings/:buildingId/readings/:readingId', asyncRoute(async (req
   const buildingId = validate(idSchema, req.params.buildingId);
   const readingId = validate(idSchema, req.params.readingId);
   await requireBuildingMember(req.userId, buildingId, true);
-  const body = validate(readingSchema.partial().refine(x => Object.keys(x).length > 0, 'At least one field is required'), req.body);
+  const body = validate(readingFieldsSchema.partial().refine(x => Object.keys(x).length > 0, 'At least one field is required'), req.body);
   const current = await prisma.energyPeriod.findFirst({ where: { readingId, buildingId }, select: { periodStart: true, periodEnd: true } });
   if (!current) return res.status(404).json({ error: { message: 'Reading not found' } });
   const start = body.periodStart ? new Date(body.periodStart) : current.periodStart;
