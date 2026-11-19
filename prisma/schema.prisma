@@ -81,5 +81,5 @@ model EnergyPeriod {
   @@map("energy_periods")
 }
 
-// SQL CHECK constraints in dbms/03_schema.sql enforce nonnegative values,
-// valid period order, and nonempty names; Prisma schema syntax cannot declare them.
+// Keep dbms/03_schema.sql aligned with these models and indexes. SQL CHECK
+// constraints enforce nonnegative values, valid period order, and nonempty names.

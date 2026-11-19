@@ -4,10 +4,13 @@
 
 Drift stores readings for a building and a time interval. Each interval has energy generated and consumed in kWh, with optional grid-import and battery readings. Users can belong to multiple buildings, and readings can be manually recorded or imported. A building has one aggregated reading per interval; imports that overlap an existing interval must be reconciled by the API before insertion. All timestamps are stored with a time zone, and reports convert them to the building's local time zone in the application.
 
-The energy gap and solar coverage are derived values, not stored values:
+Balance, gap and solar coverage are derived values, not stored values:
 
-- `energy_gap_kwh = consumed_kwh - generated_kwh` (positive means consumption exceeded generation).
+- `energy_balance_kwh = generated_kwh - consumed_kwh` (negative means consumption exceeded generation; this is the sign convention used by the browser preview).
+- `energy_gap_kwh = consumed_kwh - generated_kwh` (positive means consumption exceeded generation; this is the sign convention used in the SQL trend reports).
 - `solar_coverage_pct = 100 * min(generated_kwh, consumed_kwh) / consumed_kwh`; it is `NULL` when consumption is zero. Capping at 100% means exported surplus does not inflate the share of consumption covered by solar.
+
+The two energy measures are exact opposites: `energy_balance_kwh = -energy_gap_kwh`. Reports should label which sign convention they use rather than showing an unlabeled “gap” value.
 
 ## Starting unnormalized record (UNF)
 
