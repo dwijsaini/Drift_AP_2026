@@ -53,7 +53,7 @@ BEGIN
                  round((2 + mod(s.hour_number * 7, 25)::numeric / 10), 3) AS consumed_kwh
       ) AS energy
     ON CONFLICT (building_id, period_start, period_end) DO NOTHING;
-END
+END;
 $seed$;
 
 ANALYZE app_users;
