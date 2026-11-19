@@ -3,6 +3,7 @@ SELECT b.building_id,
        date_trunc('day', ep.period_start AT TIME ZONE b.timezone)::date AS local_day,
        sum(ep.generated_kwh) AS generated_kwh,
        sum(ep.consumed_kwh) AS consumed_kwh,
+       sum(ep.generated_kwh - ep.consumed_kwh) AS energy_balance_kwh,
        sum(ep.consumed_kwh - ep.generated_kwh) AS energy_gap_kwh,
        CASE WHEN sum(ep.consumed_kwh) = 0 THEN NULL
             ELSE round(100 * least(sum(ep.generated_kwh), sum(ep.consumed_kwh))
@@ -35,11 +36,34 @@ WITH monthly AS (
     GROUP BY b.building_id, month
 )
 SELECT month, generated_kwh, consumed_kwh, energy_gap_kwh,
+       CASE WHEN consumed_kwh = 0 THEN NULL
+            ELSE round(100 * least(generated_kwh, consumed_kwh) / consumed_kwh, 2)
+       END AS solar_coverage_pct,
        energy_gap_kwh - lag(energy_gap_kwh) OVER (ORDER BY month) AS gap_change_kwh
 FROM monthly
 ORDER BY month;
 
--- READ R3: Daily grid-import and battery totals for a dashboard completeness view.
+-- READ R3: Weekly generation, consumption, balance, and coverage trend.
+SELECT b.building_id,
+       date_trunc('week', ep.period_start AT TIME ZONE b.timezone)::date AS week_start,
+       sum(ep.generated_kwh) AS generated_kwh,
+       sum(ep.consumed_kwh) AS consumed_kwh,
+       sum(ep.generated_kwh - ep.consumed_kwh) AS energy_balance_kwh,
+       CASE WHEN sum(ep.consumed_kwh) = 0 THEN NULL
+            ELSE round(100 * least(sum(ep.generated_kwh), sum(ep.consumed_kwh))
+                            / sum(ep.consumed_kwh), 2)
+       END AS solar_coverage_pct
+FROM building_members bm
+JOIN buildings b ON b.building_id = bm.building_id
+JOIN energy_periods ep ON ep.building_id = b.building_id
+WHERE bm.user_id = $1
+  AND b.building_id = $2
+  AND ep.period_start >= $3
+  AND ep.period_start < $4
+GROUP BY b.building_id, week_start
+ORDER BY week_start;
+
+-- READ R4: Daily grid-import and battery totals for a dashboard completeness view.
 SELECT b.building_id,
        date_trunc('day', ep.period_start AT TIME ZONE b.timezone)::date AS local_day,
        sum(ep.grid_import_kwh) AS grid_import_kwh,

@@ -45,6 +45,7 @@ CREATE TABLE energy_periods (
 -- Common access paths for membership checks and time-series reads.
 CREATE INDEX energy_periods_building_time_idx
     ON energy_periods (building_id, period_start DESC);
+-- Keep this a full index so it matches the Prisma @@index declaration.
 CREATE INDEX energy_periods_recorded_by_idx
-    ON energy_periods (recorded_by_user_id) WHERE recorded_by_user_id IS NOT NULL;
+    ON energy_periods (recorded_by_user_id);
 CREATE INDEX building_members_user_idx ON building_members (user_id, building_id);
