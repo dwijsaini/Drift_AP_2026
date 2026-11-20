@@ -27,21 +27,45 @@ export const SUMMARY_GRANULARITY = {
  */
 export async function getEnergySummary(buildingId, userId, unit, from, to) {
   const rows = await prisma.$queryRaw(Prisma.sql`
-    SELECT date_trunc(${unit}, ep.period_start AT TIME ZONE b.timezone)::date AS "periodStart",
-           sum(ep.generated_kwh) AS "generatedKwh",
-           sum(ep.consumed_kwh) AS "consumedKwh",
-           sum(ep.generated_kwh - ep.consumed_kwh) AS "energyBalanceKwh",
-           sum(ep.consumed_kwh - ep.generated_kwh) AS "energyGapKwh",
-           CASE WHEN sum(ep.consumed_kwh) = 0 THEN NULL
-                ELSE round(100 * least(sum(ep.generated_kwh), sum(ep.consumed_kwh)) / sum(ep.consumed_kwh), 2)
-           END AS "solarCoveragePct"
+    SELECT
+      date_trunc(${unit}, ep.period_start AT TIME ZONE b.timezone)::date AS "periodStart",
+      CASE ${unit}
+        WHEN 'day'   THEN (date_trunc('day',   ep.period_start AT TIME ZONE b.timezone) + interval '1 day')::date
+        WHEN 'week'  THEN (date_trunc('week',  ep.period_start AT TIME ZONE b.timezone) + interval '7 days')::date
+        WHEN 'month' THEN (date_trunc('month', ep.period_start AT TIME ZONE b.timezone) + interval '1 month')::date
+      END AS "periodEnd",
+      b.timezone AS "timezone",
+      sum(ep.generated_kwh)                           AS "generatedKwh",
+      sum(ep.consumed_kwh)                            AS "consumedKwh",
+      sum(ep.generated_kwh - ep.consumed_kwh)         AS "energyBalanceKwh",
+      sum(ep.consumed_kwh - ep.generated_kwh)         AS "energyGapKwh",
+      CASE WHEN sum(ep.consumed_kwh) = 0 THEN NULL
+           ELSE round(100 * least(sum(ep.generated_kwh), sum(ep.consumed_kwh))
+                           / sum(ep.consumed_kwh), 2)
+      END AS "solarCoveragePct",
+      count(ep.reading_id)                            AS "readingCount"
     FROM building_members bm
     JOIN buildings b ON b.building_id = bm.building_id
     JOIN energy_periods ep ON ep.building_id = b.building_id
-    WHERE bm.user_id = ${userId} AND b.building_id = ${buildingId}
-      AND ep.period_start >= ${from} AND ep.period_start < ${to}
-    GROUP BY 1 ORDER BY 1`);
-  return rows;
+    WHERE bm.user_id = ${userId}
+      AND b.building_id = ${buildingId}
+      AND ep.period_start >= ${from}
+      AND ep.period_start <  ${to}
+    GROUP BY 1, 2, 3
+    ORDER BY 1`);
+
+  // Attach hasGap: compare actual reading count to expected hourly readings
+  return rows.map(row => {
+    const count = Number(row.readingCount);
+    // Derive expected count from periodStart → periodEnd span in hours
+    const spanMs = new Date(row.periodEnd) - new Date(row.periodStart);
+    const spanHours = Math.round(spanMs / 3_600_000);
+    return {
+      ...row,
+      readingCount: count,
+      hasGap: count < spanHours,
+    };
+  });
 }
 
 /**
