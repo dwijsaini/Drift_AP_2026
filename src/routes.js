@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { parse } from 'csv-parse/sync';
 import { stringify } from 'csv-stringify/sync';
-import { Prisma } from '@prisma/client';
 import { prisma } from './db.js';
 import { requireBuildingMember, requireUser } from './auth.js';
 import { asyncRoute, idSchema, readingSchema, validate } from './http.js';
+import { getEnergySummary, SUMMARY_GRANULARITY } from './energyService.js';
 import { z } from 'zod';
 
 export const router = Router();
@@ -92,9 +92,7 @@ router.delete('/buildings/:buildingId/readings/:readingId', asyncRoute(async (re
   res.status(204).end();
 }));
 
-const summaryGranularity = {
-  daily: Prisma.sql`'day'`, weekly: Prisma.sql`'week'`, monthly: Prisma.sql`'month'`
-};
+const summaryGranularity = SUMMARY_GRANULARITY;
 router.get('/buildings/:buildingId/summaries/:granularity', asyncRoute(async (req, res) => {
   const buildingId = validate(idSchema, req.params.buildingId);
   const unit = summaryGranularity[req.params.granularity];
@@ -102,20 +100,7 @@ router.get('/buildings/:buildingId/summaries/:granularity', asyncRoute(async (re
   await requireBuildingMember(req.userId, buildingId);
   const { from, to } = validate(listQuery, req.query);
   if (!from || !to || Date.parse(from) >= Date.parse(to)) return res.status(400).json({ error: { message: 'Valid from and to timestamps are required' } });
-  const rows = await prisma.$queryRaw(Prisma.sql`
-    SELECT date_trunc(${unit}, ep.period_start AT TIME ZONE b.timezone)::date AS "periodStart",
-           sum(ep.generated_kwh) AS "generatedKwh", sum(ep.consumed_kwh) AS "consumedKwh",
-           sum(ep.generated_kwh - ep.consumed_kwh) AS "energyBalanceKwh",
-           sum(ep.consumed_kwh - ep.generated_kwh) AS "energyGapKwh",
-           CASE WHEN sum(ep.consumed_kwh) = 0 THEN NULL
-                ELSE round(100 * least(sum(ep.generated_kwh), sum(ep.consumed_kwh)) / sum(ep.consumed_kwh), 2)
-           END AS "solarCoveragePct"
-    FROM building_members bm
-    JOIN buildings b ON b.building_id = bm.building_id
-    JOIN energy_periods ep ON ep.building_id = b.building_id
-    WHERE bm.user_id = ${req.userId} AND b.building_id = ${buildingId}
-      AND ep.period_start >= ${new Date(from)} AND ep.period_start < ${new Date(to)}
-    GROUP BY 1 ORDER BY 1`);
+  const rows = await getEnergySummary(buildingId, req.userId, unit, new Date(from), new Date(to));
   res.json({ data: rows });
 }));
 
