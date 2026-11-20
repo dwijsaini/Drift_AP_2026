@@ -24,3 +24,7 @@ Open [`frontend/index.html`](frontend/index.html) in a browser. Add a building n
 ## Run the REST API
 
 The API uses the existing Prisma/PostgreSQL building, membership, and energy-period models. Copy `.env.example` to `.env`, set `DATABASE_URL`, then run `npm install`, `npm run db:push`, `npm run db:seed`, and `npm run dev`. See [`docs/api.md`](docs/api.md) for routes, CSV format, summary metrics, and the local identity-header limitation.
+
+## Frontend preview and API mode
+
+Open `frontend/index.html` directly for the local-storage preview; its readings remain in the browser. Serve the repository through the Drift API origin and open `frontend/index.html?mode=api` to use the adapter in `frontend/data-adapter.js`. That file owns the HTTP route mapping (`GET /api/buildings`, building readings, create/update/delete readings, and summary) and centralizes response/error handling. The API requires the configured database and identity header described in `docs/api.md`.
