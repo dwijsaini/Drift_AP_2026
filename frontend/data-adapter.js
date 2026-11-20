@@ -1,27 +1,70 @@
-// All persistence and HTTP mapping lives here so the UI can switch modes without
-// coupling components to endpoint details. Enable API mode with ?mode=api.
+// Keep HTTP details and browser-only storage out of the dashboard.
 const KEY = 'drift.frontend-preview.v1';
-const params = new URLSearchParams(location.search);
+const SELECTED_BUILDING_KEY = 'drift.api-building-id';
+const params = new URLSearchParams(window.location.search);
 const apiMode = params.get('mode') === 'api';
-const userId = params.get('userId') || localStorage.getItem('drift.api-user-id') || '';
-export function setApiUserId(value) { localStorage.setItem('drift.api-user-id', value); }
-const request = async (path, init) => {
-  const response = await fetch(`/api${path}`, { ...init, headers: { 'Content-Type': 'application/json', ...(userId ? { 'X-User-Id': userId } : {}), ...init?.headers } });
+let apiUserId = params.get('userId') || localStorage.getItem('drift.api-user-id') || '';
+
+async function request(path, init = {}) {
+  const headers = new Headers(init.headers || {});
+  if (init.body !== undefined && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  if (apiUserId) headers.set('X-User-Id', apiUserId);
+  const response = await fetch('/api' + path, { ...init, headers });
+  if (response.status === 204) return null;
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.error?.message || `Request failed (${response.status})`);
-  return body.data ?? body;
-};
+  if (!response.ok) {
+    throw new Error(body?.error?.message || 'Request failed (' + response.status + ')');
+  }
+  return body?.data ?? body;
+}
+
 const local = {
-  load() { try { return JSON.parse(localStorage.getItem(KEY)) ?? { buildingName: 'My home', readings: [] }; } catch { return { buildingName: 'My home', readings: [] }; } },
-  save(state) { localStorage.setItem(KEY, JSON.stringify(state)); },
+  load() {
+    try {
+      return JSON.parse(localStorage.getItem(KEY)) || { buildingName: 'My home', readings: [] };
+    } catch {
+      return { buildingName: 'My home', readings: [] };
+    }
+  },
+  save(state) {
+    localStorage.setItem(KEY, JSON.stringify(state));
+  },
 };
+
 export const adapter = {
   mode: apiMode ? 'api' : 'local',
+  get userId() { return apiUserId; },
   local,
-  async buildings() { return apiMode ? request('/buildings') : [{ id: 'local', name: local.load().buildingName }]; },
-  async readings(id) { return apiMode ? request(`/buildings/${id}/readings`) : local.load().readings; },
-  createReading(id, value) { return apiMode ? request(`/buildings/${id}/readings`, { method: 'POST', body: JSON.stringify(value) }) : Promise.resolve(value); },
-  updateReading(id, value) { return apiMode ? request(`/buildings/${window.driftBuildingId}/readings/${id}`, { method: 'PATCH', body: JSON.stringify(value) }) : Promise.resolve(value); },
-  deleteReading(id) { return apiMode ? request(`/buildings/${window.driftBuildingId}/readings/${id}`, { method: 'DELETE' }) : Promise.resolve(); },
-  summary(id, from, to) { return request(`/buildings/${id}/summaries/daily?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`); },
+  selectedBuildingId() { return localStorage.getItem(SELECTED_BUILDING_KEY); },
+  setSelectedBuildingId(id) {
+    if (id) localStorage.setItem(SELECTED_BUILDING_KEY, String(id));
+    else localStorage.removeItem(SELECTED_BUILDING_KEY);
+  },
+  buildings() { return apiMode ? request('/buildings') : Promise.resolve([]); },
+  createBuilding(value) {
+    return request('/buildings', { method: 'POST', body: JSON.stringify(value) });
+  },
+  readings(buildingId) {
+    return request('/buildings/' + encodeURIComponent(buildingId) + '/readings');
+  },
+  createReading(buildingId, value) {
+    return request('/buildings/' + encodeURIComponent(buildingId) + '/readings', {
+      method: 'POST', body: JSON.stringify(value),
+    });
+  },
+  updateReading(buildingId, readingId, value) {
+    return request('/buildings/' + encodeURIComponent(buildingId) + '/readings/' +
+      encodeURIComponent(readingId), { method: 'PATCH', body: JSON.stringify(value) });
+  },
+  deleteReading(buildingId, readingId) {
+    return request('/buildings/' + encodeURIComponent(buildingId) + '/readings/' +
+      encodeURIComponent(readingId), { method: 'DELETE' });
+  },
+  summary(buildingId, granularity, from, to) {
+    const query = '?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
+    return request('/buildings/' + encodeURIComponent(buildingId) +
+      '/summaries/' + encodeURIComponent(granularity) + query);
+  },
 };

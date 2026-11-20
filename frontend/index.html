@@ -23,6 +23,7 @@
 
     <main id="top" class="main-content">
       <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><span id="mode-status" class="local-badge"><i></i> Saved on this device</span></header>
+      <p id="app-error" class="form-error" role="alert" hidden></p>
 
       <section id="overview" class="intro">
         <div><p class="eyebrow">SOLAR BALANCE MONITOR</p><h1>Energy, in balance.</h1><p class="intro-copy">See how your solar generation is keeping pace with the energy you use.</p></div>
@@ -46,15 +47,15 @@
         </article>
 
         <article class="panel add-panel" id="reading-form-panel">
-          <div class="panel-heading"><div><p class="eyebrow">LOG ENERGY</p><h2>Add a reading</h2></div><span class="form-spark">✳</span></div>
-          <p class="form-help">Enter generation and consumption for the same time period.</p>
+          <div class="panel-heading"><div><p class="eyebrow">LOG ENERGY</p><h2 id="reading-form-title">Add a reading</h2></div><span class="form-spark">✳</span></div>
+          <p class="form-help">Enter start and end times in the building’s time zone. The end is exclusive; for example, 10:00 to 11:00.</p>
           <form id="reading-form">
-            <div class="field-row"><label>From<input name="periodStart" type="date" required></label><label>To<input name="periodEnd" type="date" required></label></div>
+            <div class="field-row"><label>From<input name="periodStart" type="datetime-local" required></label><label>To<input name="periodEnd" type="datetime-local" required></label></div>
             <label>Energy generated <span class="unit-label">kWh</span><input name="generatedKwh" type="number" min="0" step="0.001" placeholder="e.g. 18.4" required></label>
             <label>Energy consumed <span class="unit-label">kWh</span><input name="consumedKwh" type="number" min="0" step="0.001" placeholder="e.g. 22.7" required></label>
             <details class="optional-fields"><summary>Grid &amp; battery (optional)</summary><div class="optional-grid"><label>Grid import (kWh)<input name="gridImportKwh" type="number" min="0" step="0.001" placeholder="—"></label><label>Battery charged (kWh)<input name="batteryChargeKwh" type="number" min="0" step="0.001" placeholder="—"></label><label>Battery discharged (kWh)<input name="batteryDischargeKwh" type="number" min="0" step="0.001" placeholder="—"></label></div></details>
-            <p id="form-error" class="form-error" role="alert" hidden></p>
-            <button class="button button-green" type="submit">Save reading <span>→</span></button>
+            <button id="reading-submit" class="button button-green" type="submit">Save reading →</button>
+            <button id="cancel-edit" class="text-button" type="button" hidden>Cancel edit</button>
           </form>
         </article>
       </section>
