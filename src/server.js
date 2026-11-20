@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { prisma } from './db.js';
 import { errorMiddleware } from './http.js';
 import { router } from './routes.js';
@@ -14,6 +16,8 @@ app.get('/health', async (_req, res, next) => {
   } catch (error) { next(error); }
 });
 app.use('/api', router);
+const frontendDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../frontend');
+app.use(express.static(frontendDirectory));
 app.use((req, res) => res.status(404).json({ error: { message: 'Route not found' } }));
 app.use(errorMiddleware);
 

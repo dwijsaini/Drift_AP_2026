@@ -17,10 +17,31 @@ psql -v ON_ERROR_STOP=1 -d drift_dbms -f dbms/03_schema.sql -f dbms/seed.sql
 
 The seed script creates one demo user, one building, and hourly readings for 2025. It is safe to rerun: existing demo records are retained and missing intervals are added. Use a fresh database for timing work, and record the actual PostgreSQL version and machine in [`dbms/05_query_timings.md`](dbms/05_query_timings.md).
 
-## Run the first-stage prototype
+## Run the browser-only preview
 
-Open [`frontend/index.html`](frontend/index.html) in a browser. Add a building name and energy readings for matching time periods. The prototype saves its data in that browser only. Use **Clear local data** to remove the saved prototype data.
+The dashboard uses JavaScript modules, so serve it over HTTP instead of opening the HTML file directly:
 
-## Run the REST API
+    cd frontend
+    python3 -m http.server 8080
 
-The API uses the existing Prisma/PostgreSQL building, membership, and energy-period models. Copy `.env.example` to `.env`, set `DATABASE_URL`, then run `npm install`, `npm run db:push`, `npm run db:seed`, and `npm run dev`. See [`docs/api.md`](docs/api.md) for routes, CSV format, summary/comparison metrics, and authentication details.
+Open http://localhost:8080. Preview readings are stored in that browser only.
+
+## Run the API-backed dashboard
+
+Requirements: Node.js 20+ and PostgreSQL 15+. From the repository root:
+
+    cp .env.example .env
+    # Set DATABASE_URL in .env for your local PostgreSQL database.
+    npm ci
+    npm run prisma:generate
+    npm run prisma:migrate:deploy
+    npm run db:seed
+    npm run dev
+
+Open http://localhost:3000. Add ?mode=api&userId=1 to the page address to connect to the seeded demo account; replace 1 with the user ID printed by the seed command.
+
+## Dashboard features
+
+The dashboard displays generation, consumption, balance, and solar coverage; charts daily, weekly, and monthly trends; and warns about missing hourly readings. Users can record grid imports, enter an electricity rate for a clearly labeled cost estimate, compare accessible buildings over the same date range, and use a what-if control to explore higher solar generation without changing saved readings.
+
+In API mode, users can import and export readings as CSV. Import is available to building owners and editors; viewers remain read-only. CSV routes, building comparison, completeness fields, and estimated-cost formulas are documented in [docs/api.md](docs/api.md). The X-User-Id header is a development identity mechanism for this class project, not production authentication.

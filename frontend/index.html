@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#f4f7f3">
   <title>Drift — Solar balance</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="app.js" defer></script>
+  <script type="module" src="app.js"></script>
 </head>
 <body>
   <div class="shell">
     <aside class="sidebar">
       <a class="brand" href="#top" aria-label="Drift home"><span class="brand-mark">d</span><span>drift<span class="brand-dot">.</span></span></a>
       <div class="workspace-label">WORKSPACE</div>
-      <label class="building-picker" for="building-name"><span class="building-icon">⌂</span><span><small>BUILDING</small><input id="building-name" value="My home" maxlength="60" aria-label="Building name"></span><span class="chevron">⌄</span></label>
+      <label class="building-picker"><span class="building-icon">⌂</span><span><small>BUILDING</small><select id="building-select" aria-label="Select building"></select></span></label><button id="manage-building" class="text-button" type="button">Manage building</button>
       <nav class="nav-links" aria-label="Main navigation">
         <a class="nav-link active" href="#overview"><span>◫</span> Overview</a>
         <a class="nav-link" href="#readings"><span>⌁</span> Readings</a>
@@ -22,7 +22,8 @@
     </aside>
 
     <main id="top" class="main-content">
-      <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><span class="local-badge"><i></i> Saved on this device</span></header>
+      <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><span id="mode-status" class="local-badge"><i></i> Saved on this device</span></header>
+      <p id="app-error" class="form-error" role="alert" hidden></p>
 
       <section id="overview" class="intro">
         <div><p class="eyebrow">SOLAR BALANCE MONITOR</p><h1>Energy, in balance.</h1><p class="intro-copy">See how your solar generation is keeping pace with the energy you use.</p></div>
@@ -36,32 +37,64 @@
         <article class="summary-card coverage-card"><div class="card-top"><span>SOLAR COVERAGE</span><span class="card-icon coverage">◉</span></div><div class="metric"><strong id="solar-coverage">—</strong><span id="coverage-unit">%</span></div><p class="card-note">Share of use covered by solar</p></article>
       </section>
 
+      <section id="advanced-tools" class="panel advanced-panel" aria-labelledby="advanced-heading">
+        <div class="panel-heading"><div><p class="eyebrow">ENERGY INSIGHTS</p><h2 id="advanced-heading">More ways to understand your data</h2></div></div>
+        <div class="advanced-grid">
+          <label>Grid electricity rate
+            <span class="rate-input"><input id="electricity-rate" type="number" min="0" max="1000" step="0.01" placeholder="e.g. 8.25"><span>INR / kWh</span></span>
+          </label>
+          <div class="advanced-metric"><span>ESTIMATED GRID COST</span><strong id="estimated-grid-cost">—</strong><small id="grid-cost-note">Enter a rate and add grid-import readings.</small></div>
+          <div class="csv-controls" id="csv-controls">
+            <button id="export-csv" class="button button-dark" type="button">Export CSV</button>
+            <label class="button button-green import-button">Import CSV<input id="import-csv" type="file" accept=".csv,text/csv" hidden></label>
+          </div>
+        </div>
+        <p id="advanced-status" class="form-error" role="status" hidden></p>
+        <div class="advanced-lower">
+          <div>
+            <h3>Compare buildings</h3>
+            <p class="form-help">Compare accessible buildings over the selected building’s recorded date range.</p>
+            <button id="compare-buildings" class="button button-dark" type="button">Compare buildings</button>
+            <div id="comparison-results" class="comparison-results" hidden></div>
+          </div>
+          <div>
+            <h3>What-if planner</h3>
+            <p class="form-help">Explore a hypothetical increase in solar generation. This does not change saved readings.</p>
+            <label class="scenario-control">Assumed generation increase: <strong id="scenario-percent">0%</strong>
+              <input id="scenario-increase" type="range" min="0" max="100" step="5" value="0">
+            </label>
+            <p id="scenario-result" class="scenario-result"></p>
+          </div>
+        </div>
+      </section>
+
       <section class="content-grid">
         <article class="panel trend-panel">
-          <div class="panel-heading"><div><p class="eyebrow">YOUR ENERGY STORY</p><h2>Generation &amp; use</h2></div><label class="select-wrap"><span class="visually-hidden">Trend range</span><select id="range-select"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="all">All readings</option></select></label></div>
+          <div class="panel-heading"><div><p class="eyebrow">YOUR ENERGY STORY</p><h2>Generation &amp; use</h2></div><label class="select-wrap"><span class="visually-hidden">Trend range</span><select id="range-select"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="all">All readings</option></select></label></div>
           <div class="chart-legend"><span><i class="legend-generated"></i> Generated</span><span><i class="legend-consumed"></i> Consumed</span></div>
           <div id="chart-empty" class="chart-empty"><span class="empty-sun">☼</span><p>Your energy story starts here.</p><span>Add a reading to see generation and use over time.</span></div>
           <div id="chart-wrap" class="chart-wrap" hidden><canvas id="energy-chart" role="img" aria-label="Bar chart comparing generated and consumed energy"></canvas><div id="chart-labels" class="chart-labels"></div></div>
+          <div id="completeness-alert" class="alert" hidden><span>!</span><p id="completeness-message"></p></div>
           <div id="worsening-alert" class="alert" hidden><span>↗</span><p><strong>The gap is widening.</strong> Consumption has exceeded generation and the gap has grown for three periods in a row.</p></div>
         </article>
 
         <article class="panel add-panel" id="reading-form-panel">
-          <div class="panel-heading"><div><p class="eyebrow">LOG ENERGY</p><h2>Add a reading</h2></div><span class="form-spark">✳</span></div>
-          <p class="form-help">Enter generation and consumption for the same time period.</p>
+          <div class="panel-heading"><div><p class="eyebrow">LOG ENERGY</p><h2 id="reading-form-title">Add a reading</h2></div><span class="form-spark">✳</span></div>
+          <p class="form-help">Enter start and end times in the building’s time zone. The end is exclusive; for example, 10:00 to 11:00.</p>
           <form id="reading-form">
-            <div class="field-row"><label>From<input name="periodStart" type="date" required></label><label>To<input name="periodEnd" type="date" required></label></div>
+            <div class="field-row"><label>From<input name="periodStart" type="datetime-local" required></label><label>To<input name="periodEnd" type="datetime-local" required></label></div>
             <label>Energy generated <span class="unit-label">kWh</span><input name="generatedKwh" type="number" min="0" step="0.001" placeholder="e.g. 18.4" required></label>
             <label>Energy consumed <span class="unit-label">kWh</span><input name="consumedKwh" type="number" min="0" step="0.001" placeholder="e.g. 22.7" required></label>
             <details class="optional-fields"><summary>Grid &amp; battery (optional)</summary><div class="optional-grid"><label>Grid import (kWh)<input name="gridImportKwh" type="number" min="0" step="0.001" placeholder="—"></label><label>Battery charged (kWh)<input name="batteryChargeKwh" type="number" min="0" step="0.001" placeholder="—"></label><label>Battery discharged (kWh)<input name="batteryDischargeKwh" type="number" min="0" step="0.001" placeholder="—"></label></div></details>
-            <p id="form-error" class="form-error" role="alert" hidden></p>
-            <button class="button button-green" type="submit">Save reading <span>→</span></button>
+            <button id="reading-submit" class="button button-green" type="submit">Save reading →</button>
+            <button id="cancel-edit" class="text-button" type="button" hidden>Cancel edit</button>
           </form>
         </article>
       </section>
 
       <section id="readings" class="panel readings-panel">
         <div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>Your readings</h2></div><button id="clear-data" class="text-button" type="button">Clear local data</button></div>
-        <div class="table-scroll"><table><thead><tr><th>PERIOD</th><th>GENERATED</th><th>CONSUMED</th><th>BALANCE</th><th>COVERAGE</th></tr></thead><tbody id="readings-body"></tbody></table></div>
+        <div class="table-scroll"><table><thead><tr><th>PERIOD</th><th>GENERATED</th><th>CONSUMED</th><th>BALANCE</th><th>COVERAGE</th><th>ACTIONS</th></tr></thead><tbody id="readings-body"></tbody></table></div>
         <div id="table-empty" class="table-empty">No readings yet. Add your first time period above.</div>
       </section>
       <footer><span>Drift · Solar Balance Monitor</span><span>First-stage browser preview · data stays on this device</span></footer>
