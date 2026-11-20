@@ -37,12 +37,44 @@
         <article class="summary-card coverage-card"><div class="card-top"><span>SOLAR COVERAGE</span><span class="card-icon coverage">◉</span></div><div class="metric"><strong id="solar-coverage">—</strong><span id="coverage-unit">%</span></div><p class="card-note">Share of use covered by solar</p></article>
       </section>
 
+      <section id="advanced-tools" class="panel advanced-panel" aria-labelledby="advanced-heading">
+        <div class="panel-heading"><div><p class="eyebrow">ENERGY INSIGHTS</p><h2 id="advanced-heading">More ways to understand your data</h2></div></div>
+        <div class="advanced-grid">
+          <label>Grid electricity rate
+            <span class="rate-input"><input id="electricity-rate" type="number" min="0" max="1000" step="0.01" placeholder="e.g. 8.25"><span>INR / kWh</span></span>
+          </label>
+          <div class="advanced-metric"><span>ESTIMATED GRID COST</span><strong id="estimated-grid-cost">—</strong><small id="grid-cost-note">Enter a rate and add grid-import readings.</small></div>
+          <div class="csv-controls" id="csv-controls">
+            <button id="export-csv" class="button button-dark" type="button">Export CSV</button>
+            <label class="button button-green import-button">Import CSV<input id="import-csv" type="file" accept=".csv,text/csv" hidden></label>
+          </div>
+        </div>
+        <p id="advanced-status" class="form-error" role="status" hidden></p>
+        <div class="advanced-lower">
+          <div>
+            <h3>Compare buildings</h3>
+            <p class="form-help">Compare accessible buildings over the selected building’s recorded date range.</p>
+            <button id="compare-buildings" class="button button-dark" type="button">Compare buildings</button>
+            <div id="comparison-results" class="comparison-results" hidden></div>
+          </div>
+          <div>
+            <h3>What-if planner</h3>
+            <p class="form-help">Explore a hypothetical increase in solar generation. This does not change saved readings.</p>
+            <label class="scenario-control">Assumed generation increase: <strong id="scenario-percent">0%</strong>
+              <input id="scenario-increase" type="range" min="0" max="100" step="5" value="0">
+            </label>
+            <p id="scenario-result" class="scenario-result"></p>
+          </div>
+        </div>
+      </section>
+
       <section class="content-grid">
         <article class="panel trend-panel">
           <div class="panel-heading"><div><p class="eyebrow">YOUR ENERGY STORY</p><h2>Generation &amp; use</h2></div><label class="select-wrap"><span class="visually-hidden">Trend range</span><select id="range-select"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="all">All readings</option></select></label></div>
           <div class="chart-legend"><span><i class="legend-generated"></i> Generated</span><span><i class="legend-consumed"></i> Consumed</span></div>
           <div id="chart-empty" class="chart-empty"><span class="empty-sun">☼</span><p>Your energy story starts here.</p><span>Add a reading to see generation and use over time.</span></div>
           <div id="chart-wrap" class="chart-wrap" hidden><canvas id="energy-chart" role="img" aria-label="Bar chart comparing generated and consumed energy"></canvas><div id="chart-labels" class="chart-labels"></div></div>
+          <div id="completeness-alert" class="alert" hidden><span>!</span><p id="completeness-message"></p></div>
           <div id="worsening-alert" class="alert" hidden><span>↗</span><p><strong>The gap is widening.</strong> Consumption has exceeded generation and the gap has grown for three periods in a row.</p></div>
         </article>
 

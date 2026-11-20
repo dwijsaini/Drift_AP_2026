@@ -32,6 +32,10 @@ let currentRole = 'OWNER';
 let buildingTimezone = localTimezone;
 let summaryCache = {};
 let editing = null;
+const RATE_KEY = 'drift.electricity-rate-inr';
+const rateInput = document.querySelector('#electricity-rate');
+const advancedStatus = document.querySelector('#advanced-status');
+rateInput.value = localStorage.getItem(RATE_KEY) || '';
 
 const form = document.querySelector('#reading-form');
 const startInput = form.elements.periodStart;
@@ -103,7 +107,17 @@ function mapApiSummary(row, granularity) {
     periodEnd: addDays(endExclusive, -1),
     generatedKwh: numeric(row.generatedKwh),
     consumedKwh: numeric(row.consumedKwh),
+    gridImportKwh: row.gridImportKwh == null ? null : numeric(row.gridImportKwh),
+    expectedReadingCount: numeric(row.expectedReadingCount),
+    missingPeriodCount: numeric(row.missingPeriodCount),
+    hasGap: Boolean(row.hasGap),
+    estimatedGridCostInr: row.estimatedGridCostInr == null ? null : numeric(row.estimatedGridCostInr),
   };
+}
+
+function selectedRate() {
+  const value = rateInput.value.trim();
+  return value === '' ? undefined : Number(value);
 }
 
 function toApiReading(reading) {
@@ -152,10 +166,13 @@ function aggregateReadings(rows, granularity) {
     }
     const group = groups.get(key) || {
       ...row, id: key, periodStart: key, periodEnd: row.periodEnd,
-      generatedKwh: 0, consumedKwh: 0,
+      generatedKwh: 0, consumedKwh: 0, gridImportKwh: null,
     };
     group.generatedKwh += numeric(row.generatedKwh);
     group.consumedKwh += numeric(row.consumedKwh);
+    if (row.gridImportKwh != null) {
+      group.gridImportKwh = numeric(group.gridImportKwh) + numeric(row.gridImportKwh);
+    }
     if (row.periodEnd > group.periodEnd) group.periodEnd = row.periodEnd;
     groups.set(key, group);
   }
@@ -196,7 +213,7 @@ async function refreshApiData(preferredBuildingId = selectedBuildingId) {
   const to = localDateTimeIso(last, buildingTimezone);
   const granularities = ['daily', 'weekly', 'monthly'];
   const results = await Promise.allSettled(granularities.map((unit) =>
-    adapter.summary(selectedBuildingId, unit, from, to)));
+    adapter.summary(selectedBuildingId, unit, from, to, selectedRate())));
   granularities.forEach((unit, index) => {
     const result = results[index];
     if (result.status === 'fulfilled') {
@@ -285,6 +302,12 @@ function render() {
     : 'Saved on this device';
   document.querySelector('#manage-building').textContent = apiMode ? 'Add building' : 'Manage building';
   document.querySelector('#clear-data').hidden = apiMode;
+  document.querySelector('#csv-controls').hidden = !apiMode;
+  document.querySelector('#compare-buildings').hidden = !apiMode;
+  document.querySelector('#import-csv').disabled = !apiMode || !selectedBuildingId || currentRole === 'VIEWER';
+  document.querySelector('#export-csv').disabled = !apiMode || !selectedBuildingId;
+  document.querySelector('#compare-buildings').disabled = !apiMode || !state.readings.length;
+  document.querySelector('#scenario-increase').disabled = false;
   document.querySelector('footer span:last-child').textContent = apiMode
     ? 'Connected to the Drift API · readings stored in PostgreSQL'
     : 'Browser preview · data stays on this device';
@@ -363,6 +386,38 @@ function render() {
     && recent[1].consumedKwh - recent[1].generatedKwh > recent[0].consumedKwh - recent[0].generatedKwh
     && recent[2].consumedKwh - recent[2].generatedKwh > recent[1].consumedKwh - recent[1].generatedKwh;
   document.querySelector('#worsening-alert').hidden = !worsening;
+
+  const completenessRows = readings.filter((row) => Number.isFinite(row.expectedReadingCount));
+  const expectedCount = completenessRows.reduce((sum, row) => sum + row.expectedReadingCount, 0);
+  const missingCount = completenessRows.reduce((sum, row) => sum + row.missingPeriodCount, 0);
+  const completenessAlert = document.querySelector('#completeness-alert');
+  completenessAlert.hidden = !apiMode || completenessRows.length === 0 || missingCount === 0;
+  document.querySelector('#completeness-message').textContent = missingCount
+    + ' of ' + expectedCount + ' expected hourly readings are missing in this view.';
+
+  const rate = selectedRate();
+  const meterRows = readings.filter((row) => row.gridImportKwh != null);
+  const hasGridData = meterRows.length > 0;
+  const gridTotal = meterRows.reduce((sum, row) => sum + numeric(row.gridImportKwh), 0);
+  const serverCostRows = meterRows.filter((row) => row.estimatedGridCostInr != null);
+  const estimatedCost = serverCostRows.length
+    ? serverCostRows.reduce((sum, row) => sum + numeric(row.estimatedGridCostInr), 0)
+    : (rate === undefined ? null : gridTotal * rate);
+  document.querySelector('#estimated-grid-cost').textContent =
+    estimatedCost == null || !hasGridData ? '—' : '₹' + displayNumber(estimatedCost, 2);
+  document.querySelector('#grid-cost-note').textContent = rate === undefined
+    ? 'Enter your rate; only recorded grid imports are counted.'
+    : !hasGridData
+      ? 'No grid-import readings are recorded for this view.'
+      : 'Estimate only; it is not a utility bill.';
+
+  const increase = Number(document.querySelector('#scenario-increase').value);
+  document.querySelector('#scenario-percent').textContent = increase + '%';
+  const projectedGeneration = generated * (1 + increase / 100);
+  const projectedBalance = projectedGeneration - consumed;
+  document.querySelector('#scenario-result').textContent =
+    'Projected balance: ' + (projectedBalance > 0 ? '+' : '') +
+    displayNumber(projectedBalance) + ' kWh (' + displayNumber(projectedGeneration) + ' kWh generation).';
 }
 
 async function editReading(reading) {
@@ -442,6 +497,21 @@ document.querySelector('#building-select').addEventListener('change', async (eve
 });
 
 document.querySelector('#range-select').addEventListener('change', render);
+document.querySelector('#scenario-increase').addEventListener('input', render);
+rateInput.addEventListener('change', async () => {
+  const value = rateInput.value.trim();
+  if (value !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 1000)) {
+    showAdvancedStatus('Enter a rate between 0 and 1000 INR per kWh.');
+    return;
+  }
+  localStorage.setItem(RATE_KEY, value);
+  showAdvancedStatus('');
+  if (adapter.mode === 'api' && selectedBuildingId) {
+    try { await refreshApiData(); }
+    catch (error) { showAdvancedStatus(error.message); }
+  }
+  render();
+});
 document.querySelector('#add-reading-top').addEventListener('click', () => {
   document.querySelector('#reading-form-panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
   startInput.focus();
@@ -509,6 +579,95 @@ form.addEventListener('submit', async (event) => {
     showError(error.message);
   }
 });
+
+document.querySelector('#compare-buildings').addEventListener('click', async () => {
+  if (!state.readings.length) {
+    showAdvancedStatus('Add readings before comparing buildings.');
+    return;
+  }
+  try {
+    const starts = state.readings.map((row) => row.periodStart).sort();
+    const ends = state.readings.map((row) => row.periodEnd).sort();
+    const from = localDateTimeIso(starts[0], buildingTimezone);
+    const to = localDateTimeIso(ends[ends.length - 1], buildingTimezone);
+    const rows = await adapter.comparison(from, to, selectedRate());
+    const target = document.querySelector('#comparison-results');
+    target.replaceChildren();
+    if (!rows.length) {
+      target.textContent = 'No accessible buildings were found for this account.';
+    } else {
+      const table = document.createElement('table');
+      const head = document.createElement('thead');
+      const header = document.createElement('tr');
+      ['Building', 'Generated', 'Consumed', 'Balance', 'Coverage', 'Missing', 'Est. grid cost'].forEach((name) => {
+        const cell = document.createElement('th');
+        cell.textContent = name;
+        header.append(cell);
+      });
+      head.append(header);
+      const body = document.createElement('tbody');
+      rows.forEach((item) => {
+        const row = document.createElement('tr');
+        const values = [
+          item.buildingName,
+          displayNumber(numeric(item.generatedKwh)) + ' kWh',
+          displayNumber(numeric(item.consumedKwh)) + ' kWh',
+          displayNumber(numeric(item.energyBalanceKwh)) + ' kWh',
+          item.solarCoveragePct == null ? '—' : displayNumber(numeric(item.solarCoveragePct), 1) + '%',
+          String(numeric(item.missingPeriodCount)),
+          item.estimatedGridCostInr == null ? '—' : '₹' + displayNumber(numeric(item.estimatedGridCostInr), 2),
+        ];
+        values.forEach((value) => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          row.append(cell);
+        });
+        body.append(row);
+      });
+      table.append(head, body);
+      target.append(table);
+    }
+    target.hidden = false;
+    showAdvancedStatus('');
+  } catch (error) {
+    showAdvancedStatus(error.message);
+  }
+});
+
+document.querySelector('#export-csv').addEventListener('click', async () => {
+  try {
+    const blob = await adapter.exportCsv(selectedBuildingId);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'drift-building-' + selectedBuildingId + '-readings.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+    showAdvancedStatus('CSV export downloaded.');
+  } catch (error) {
+    showAdvancedStatus(error.message);
+  }
+});
+
+document.querySelector('#import-csv').addEventListener('change', async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const result = await adapter.importCsv(selectedBuildingId, await file.text());
+    await refreshApiData();
+    render();
+    showAdvancedStatus('Imported ' + result.imported + ' readings.');
+  } catch (error) {
+    showAdvancedStatus(error.message);
+  } finally {
+    event.target.value = '';
+  }
+});
+
+function showAdvancedStatus(message) {
+  advancedStatus.textContent = message;
+  advancedStatus.hidden = !message;
+}
 
 document.querySelector('#cancel-edit').addEventListener('click', resetForm);
 document.querySelector('#clear-data').addEventListener('click', () => {

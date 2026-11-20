@@ -174,8 +174,12 @@ Energy balance and solar coverage are computed at query time via `src/energyServ
    - Evaluates to `null` if total consumption is zero ($0\text{ kWh}$), safely preventing division-by-zero errors.
 
 4. **Data Completeness & Gap Detection (`hasGap`):**
-   $$\text{hasGap} = \text{readingCount} < \frac{\text{periodEnd} - \text{periodStart}}{3,600,000\text{ ms}}$$
-   - Flags calendar intervals where expected hourly readings are missing.
+   `expectedReadingCount` counts local-hour slots whose starts fall within the requested range and calendar bucket. `missingPeriodCount = max(expectedReadingCount - readingCount, 0)`, and `hasGap` remains `missingPeriodCount > 0`.
+   - This uses the existing hourly-reading assumption. Hour slots are generated in the building timezone and account for 23/25-hour daylight-saving days. A completely empty bucket is included with zero readings and all expected slots missing.
+
+5. **Estimated Grid Cost:**
+   $$\text{estimatedGridCostInr} = \text{recorded gridImportKwh} \times \text{electricityRateInrPerKwh}$$
+   - This is an estimate based only on non-null recorded grid-import readings, rounded to paise. It is not a utility bill and excludes fixed charges, taxes, credits, and adjustments. If there are no recorded grid-import values or no rate was supplied, the estimate is `null`.
 
 ---
 
@@ -193,15 +197,24 @@ All IDs are positive integer strings in JSON. Energy metrics are returned in kWh
 | `PATCH /api/buildings/:buildingId/readings/:readingId` | OWNER/EDITOR | Partially update reading fields while verifying interval ordering. |
 | `DELETE /api/buildings/:buildingId/readings/:readingId` | OWNER/EDITOR | Delete specific interval reading. |
 | `GET /api/buildings/:buildingId/summaries/:granularity?from=&to=` | Member | Retrieve aggregated energy metrics. `:granularity` must be `daily`, `weekly`, or `monthly`. |
+| `GET /api/buildings/comparison?from=&to=&electricityRateInrPerKwh=` | Member | Compare totals for all caller-accessible buildings over the same range. Rate is optional. |
 | `GET /api/buildings/:buildingId/readings.csv` | Member | Export all building readings as downloadable CSV. |
 | `POST /api/buildings/:buildingId/readings.csv` | OWNER/EDITOR | Bulk import readings via CSV payload atomically in a single transaction. |
 
+The CSV import/export routes are shared by both features: import validates the exact header order and applies the JSON reading constraints (period duration and kWh limits included); blank optional meter fields remain `null`. Export emits those same headers. Reading or exporting requires membership; import requires OWNER or EDITOR. It accepts JSON `{ "csv": "..." }`, 1–10,000 rows, and a 2 MB payload limit.
+
 ### Summary Endpoint Details
 
-`GET /api/buildings/:buildingId/summaries/:granularity?from=&to=`
+`GET /api/buildings/:buildingId/summaries/:granularity?from=&to=&electricityRateInrPerKwh=`
 - **Path parameters:** `granularity` ∈ `['daily', 'weekly', 'monthly']`.
-- **Query parameters:** `from` and `to` (required ISO 8601 timestamps, e.g. `2026-10-01T00:00:00Z`).
+- **Query parameters:** `from` and `to` (required ISO 8601 timestamps); optional `electricityRateInrPerKwh` from 0 through 1000 with at most four decimal places.
 - **Timezone alignment:** Intervals are aggregated using `date_trunc(unit, ep.period_start AT TIME ZONE b.timezone)`, ensuring local calendar days, weeks (starting Monday), and months align accurately with the building's physical location.
+- **Completeness fields:** `readingCount`, `expectedReadingCount`, `missingPeriodCount`, and the existing `hasGap` flag. Calendar buckets with no readings are also returned.
+- **Cost fields:** `gridImportKwh` and `gridImportReadingCount` describe recorded meter data. If a rate is supplied, each row also includes `electricityRateInrPerKwh`, `estimatedGridCostInr` (decimal string or `null`), and `estimatedGridCostLabel`. The label explicitly says this is not a utility bill.
+
+### Building comparison
+
+`GET /api/buildings/comparison?from=<ISO timestamp>&to=<ISO timestamp>&electricityRateInrPerKwh=<optional rate>` returns one row per accessible building, including `buildingId`, `buildingName`, `timezone`, `generatedKwh`, `consumedKwh`, `energyBalanceKwh`, `energyGapKwh`, `solarCoveragePct`, `readingCount`, `expectedReadingCount`, `missingPeriodCount`, and `hasGap`. The same optional rate adds recorded grid-import fields and the explicitly labeled estimated cost. A user with no accessible buildings receives `{ "data": [] }`.
 
 #### Example Summary Response:
 ```json

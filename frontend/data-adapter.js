@@ -7,31 +7,30 @@ let apiUserId = params.get('userId') || localStorage.getItem('drift.api-user-id'
 
 async function request(path, init = {}) {
   const headers = new Headers(init.headers || {});
-  if (init.body !== undefined && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
+  if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   if (apiUserId) headers.set('X-User-Id', apiUserId);
   const response = await fetch('/api' + path, { ...init, headers });
   if (response.status === 204) return null;
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body?.error?.message || 'Request failed (' + response.status + ')');
-  }
+  if (!response.ok) throw new Error(body?.error?.message || 'Request failed (' + response.status + ')');
   return body?.data ?? body;
 }
 
 const local = {
   load() {
-    try {
-      return JSON.parse(localStorage.getItem(KEY)) || { buildingName: 'My home', readings: [] };
-    } catch {
-      return { buildingName: 'My home', readings: [] };
-    }
+    try { return JSON.parse(localStorage.getItem(KEY)) || { buildingName: 'My home', readings: [] }; }
+    catch { return { buildingName: 'My home', readings: [] }; }
   },
-  save(state) {
-    localStorage.setItem(KEY, JSON.stringify(state));
-  },
+  save(state) { localStorage.setItem(KEY, JSON.stringify(state)); },
 };
+
+function queryString(values) {
+  const query = new URLSearchParams();
+  Object.entries(values).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+  });
+  return query.toString();
+}
 
 export const adapter = {
   mode: apiMode ? 'api' : 'local',
@@ -62,9 +61,29 @@ export const adapter = {
     return request('/buildings/' + encodeURIComponent(buildingId) + '/readings/' +
       encodeURIComponent(readingId), { method: 'DELETE' });
   },
-  summary(buildingId, granularity, from, to) {
-    const query = '?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to);
+  summary(buildingId, granularity, from, to, electricityRateInrPerKwh) {
+    const query = queryString({ from, to, electricityRateInrPerKwh });
     return request('/buildings/' + encodeURIComponent(buildingId) +
-      '/summaries/' + encodeURIComponent(granularity) + query);
+      '/summaries/' + encodeURIComponent(granularity) + '?' + query);
+  },
+  comparison(from, to, electricityRateInrPerKwh) {
+    const query = queryString({ from, to, electricityRateInrPerKwh });
+    return request('/buildings/comparison?' + query);
+  },
+  importCsv(buildingId, csv) {
+    return request('/buildings/' + encodeURIComponent(buildingId) + '/readings.csv', {
+      method: 'POST', body: JSON.stringify({ csv }),
+    });
+  },
+  async exportCsv(buildingId) {
+    const headers = new Headers();
+    if (apiUserId) headers.set('X-User-Id', apiUserId);
+    const response = await fetch('/api/buildings/' + encodeURIComponent(buildingId) + '/readings.csv', { headers });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body?.error?.message || 'CSV export failed (' + response.status + ')');
+    }
+    return response.blob();
   },
 };
+
