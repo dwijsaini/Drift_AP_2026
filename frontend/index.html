@@ -6,14 +6,14 @@
   <meta name="theme-color" content="#f4f7f3">
   <title>Drift — Solar balance</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="app.js" defer></script>
+  <script type="module" src="app.js"></script>
 </head>
 <body>
   <div class="shell">
     <aside class="sidebar">
       <a class="brand" href="#top" aria-label="Drift home"><span class="brand-mark">d</span><span>drift<span class="brand-dot">.</span></span></a>
       <div class="workspace-label">WORKSPACE</div>
-      <label class="building-picker" for="building-name"><span class="building-icon">⌂</span><span><small>BUILDING</small><input id="building-name" value="My home" maxlength="60" aria-label="Building name"></span><span class="chevron">⌄</span></label>
+      <label class="building-picker"><span class="building-icon">⌂</span><span><small>BUILDING</small><select id="building-select" aria-label="Select building"></select></span></label><button id="manage-building" class="text-button" type="button">Manage building</button>
       <nav class="nav-links" aria-label="Main navigation">
         <a class="nav-link active" href="#overview"><span>◫</span> Overview</a>
         <a class="nav-link" href="#readings"><span>⌁</span> Readings</a>
@@ -22,7 +22,7 @@
     </aside>
 
     <main id="top" class="main-content">
-      <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><span class="local-badge"><i></i> Saved on this device</span></header>
+      <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><span id="mode-status" class="local-badge"><i></i> Saved on this device</span></header>
 
       <section id="overview" class="intro">
         <div><p class="eyebrow">SOLAR BALANCE MONITOR</p><h1>Energy, in balance.</h1><p class="intro-copy">See how your solar generation is keeping pace with the energy you use.</p></div>
@@ -38,7 +38,7 @@
 
       <section class="content-grid">
         <article class="panel trend-panel">
-          <div class="panel-heading"><div><p class="eyebrow">YOUR ENERGY STORY</p><h2>Generation &amp; use</h2></div><label class="select-wrap"><span class="visually-hidden">Trend range</span><select id="range-select"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="all">All readings</option></select></label></div>
+          <div class="panel-heading"><div><p class="eyebrow">YOUR ENERGY STORY</p><h2>Generation &amp; use</h2></div><label class="select-wrap"><span class="visually-hidden">Trend range</span><select id="range-select"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="all">All readings</option></select></label></div>
           <div class="chart-legend"><span><i class="legend-generated"></i> Generated</span><span><i class="legend-consumed"></i> Consumed</span></div>
           <div id="chart-empty" class="chart-empty"><span class="empty-sun">☼</span><p>Your energy story starts here.</p><span>Add a reading to see generation and use over time.</span></div>
           <div id="chart-wrap" class="chart-wrap" hidden><canvas id="energy-chart" role="img" aria-label="Bar chart comparing generated and consumed energy"></canvas><div id="chart-labels" class="chart-labels"></div></div>
@@ -61,7 +61,7 @@
 
       <section id="readings" class="panel readings-panel">
         <div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>Your readings</h2></div><button id="clear-data" class="text-button" type="button">Clear local data</button></div>
-        <div class="table-scroll"><table><thead><tr><th>PERIOD</th><th>GENERATED</th><th>CONSUMED</th><th>BALANCE</th><th>COVERAGE</th></tr></thead><tbody id="readings-body"></tbody></table></div>
+        <div class="table-scroll"><table><thead><tr><th>PERIOD</th><th>GENERATED</th><th>CONSUMED</th><th>BALANCE</th><th>COVERAGE</th><th>ACTIONS</th></tr></thead><tbody id="readings-body"></tbody></table></div>
         <div id="table-empty" class="table-empty">No readings yet. Add your first time period above.</div>
       </section>
       <footer><span>Drift · Solar Balance Monitor</span><span>First-stage browser preview · data stays on this device</span></footer>

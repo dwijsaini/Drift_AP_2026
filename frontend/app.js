@@ -1,4 +1,5 @@
-const STORAGE_KEY = 'drift.frontend-preview.v1';
+import { adapter } from './data-adapter.js';
+
 const today = new Date();
 const dateInput = (date) => {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -14,14 +15,14 @@ endInput.value = dateInput(today);
 
 function loadState() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? { buildingName: 'My home', readings: [] };
+    return adapter.local.load();
   } catch {
     return { buildingName: 'My home', readings: [] };
   }
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  adapter.local.save(state);
 }
 
 function coverage(generated, consumed) {
@@ -33,14 +34,10 @@ function displayNumber(value, digits = 1) {
 }
 
 function render() {
-  document.querySelector('#building-name').value = state.buildingName;
+  document.querySelector('#building-select').innerHTML = `<option value="local">${state.buildingName}</option>`;
   document.querySelector('#crumb-building').textContent = state.buildingName || 'My home';
-  const cutoff = new Date();
   const range = document.querySelector('#range-select').value;
-  if (range !== 'all') cutoff.setDate(cutoff.getDate() - Number(range));
-  const readings = [...state.readings]
-    .filter((reading) => range === 'all' || new Date(`${reading.periodEnd}T23:59:59`) >= cutoff)
-    .sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+  const readings = [...state.readings].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
   const generated = readings.reduce((sum, row) => sum + row.generatedKwh, 0);
   const consumed = readings.reduce((sum, row) => sum + row.consumedKwh, 0);
   const balance = generated - consumed;
@@ -73,6 +70,10 @@ function render() {
       if (index === 3) cell.className = gap >= 0 ? 'positive' : 'negative-text';
       row.append(cell);
     });
+    const actions = document.createElement('td');
+    const edit = document.createElement('button'); edit.type='button'; edit.className='text-button'; edit.textContent='Edit'; edit.onclick=()=>editReading(reading);
+    const remove = document.createElement('button'); remove.type='button'; remove.className='text-button'; remove.textContent='Delete'; remove.onclick=()=>{ if(confirm('Delete this reading?')) { state.readings=state.readings.filter(r=>r!==reading); saveState(); render(); } };
+    actions.append(edit, remove); row.append(actions);
     return row;
   }));
   document.querySelector('#table-empty').hidden = sorted.length > 0;
@@ -128,10 +129,10 @@ function drawChart(readings) {
   }));
 }
 
-document.querySelector('#building-name').addEventListener('change', (event) => {
-  state.buildingName = event.target.value.trim() || 'My home';
-  saveState(); render();
-});
+document.querySelector('#manage-building').addEventListener('click', () => { const value=prompt('Building name', state.buildingName); if(value?.trim()){state.buildingName=value.trim();saveState();render();} });
+if (adapter.mode === 'api') document.querySelector('#mode-status').textContent='API mode';
+let editing = null;
+function editReading(reading){ editing=reading; for(const key of ['periodStart','periodEnd','generatedKwh','consumedKwh','gridImportKwh','batteryChargeKwh','batteryDischargeKwh']) form.elements[key].value=reading[key] ?? ''; document.querySelector('#reading-form-panel').scrollIntoView({behavior:'smooth'}); }
 document.querySelector('#range-select').addEventListener('change', render);
 document.querySelector('#add-reading-top').addEventListener('click', () => {
   document.querySelector('#reading-form-panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -143,23 +144,25 @@ form.addEventListener('submit', (event) => {
   const start = values.get('periodStart');
   const end = values.get('periodEnd');
   const error = document.querySelector('#form-error');
-  if (end < start) {
+  if (!start || !end || end < start) {
     error.textContent = 'The end date must be on or after the start date.';
     error.hidden = false;
     return;
   }
-  if (state.readings.some((reading) => start <= reading.periodEnd && end >= reading.periodStart)) {
+  if (['generatedKwh','consumedKwh','gridImportKwh','batteryChargeKwh','batteryDischargeKwh'].some(n => values.get(n) !== '' && Number(values.get(n)) < 0)) { error.textContent='Energy values must be zero or greater.'; error.hidden=false; return; }
+  if (state.readings.some((reading) => reading !== editing && start <= reading.periodEnd && end >= reading.periodStart)) {
     error.textContent = 'That date range overlaps a reading already saved.';
     error.hidden = false;
     return;
   }
   const numeric = (name) => Number(values.get(name) || 0);
-  state.readings.push({
+  const next = {
     periodStart: start, periodEnd: end,
     generatedKwh: numeric('generatedKwh'), consumedKwh: numeric('consumedKwh'),
     gridImportKwh: numeric('gridImportKwh'), batteryChargeKwh: numeric('batteryChargeKwh'),
     batteryDischargeKwh: numeric('batteryDischargeKwh'),
-  });
+  };
+  if(editing) Object.assign(editing,next); else state.readings.push(next); editing=null;
   state.readings.sort((a, b) => a.periodStart.localeCompare(b.periodStart));
   saveState(); form.reset(); startInput.value = dateInput(new Date(Date.now() - 86_400_000)); endInput.value = dateInput(new Date());
   error.hidden = true; render();
@@ -167,7 +170,7 @@ form.addEventListener('submit', (event) => {
 document.querySelector('#clear-data').addEventListener('click', () => {
   if (!state.readings.length && state.buildingName === 'My home') return;
   if (!window.confirm('Clear this browser’s saved Drift preview data?')) return;
-  localStorage.removeItem(STORAGE_KEY); state = { buildingName: 'My home', readings: [] }; render();
+  localStorage.removeItem('drift.frontend-preview.v1'); state = { buildingName: 'My home', readings: [] }; render();
 });
 window.addEventListener('resize', () => { if (!document.querySelector('#chart-wrap').hidden) render(); });
 render();
