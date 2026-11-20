@@ -33,11 +33,28 @@ function displayNumber(value, digits = 1) {
   return Number(value).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+function aggregateReadings(rows, granularity) {
+  if (granularity === 'all') return rows.sort((a,b)=>a.periodStart.localeCompare(b.periodStart));
+  const groups = new Map();
+  for (const row of rows) {
+    const d = new Date(`${row.periodStart}T12:00:00`);
+    let key;
+    if (granularity === 'daily') key = row.periodStart;
+    else if (granularity === 'monthly') key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    else { const monday = new Date(d); monday.setDate(d.getDate() - ((d.getDay()+6)%7)); key = dateInput(monday); }
+    const group = groups.get(key) || { ...row, id: key, periodStart: key, periodEnd: key, generatedKwh: 0, consumedKwh: 0 };
+    group.generatedKwh += Number(row.generatedKwh); group.consumedKwh += Number(row.consumedKwh);
+    const end = row.periodEnd > group.periodEnd ? row.periodEnd : group.periodEnd;
+    group.periodEnd = end; groups.set(key, group);
+  }
+  return [...groups.values()].sort((a,b)=>a.periodStart.localeCompare(b.periodStart));
+}
+
 function render() {
   document.querySelector('#building-select').innerHTML = `<option value="local">${state.buildingName}</option>`;
   document.querySelector('#crumb-building').textContent = state.buildingName || 'My home';
   const range = document.querySelector('#range-select').value;
-  const readings = [...state.readings].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+  const readings = aggregateReadings([...state.readings], range);
   const generated = readings.reduce((sum, row) => sum + row.generatedKwh, 0);
   const consumed = readings.reduce((sum, row) => sum + row.consumedKwh, 0);
   const balance = generated - consumed;
