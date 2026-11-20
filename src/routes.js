@@ -1,10 +1,9 @@
 import { Router } from 'express';
-import { parse } from 'csv-parse/sync';
-import { stringify } from 'csv-stringify/sync';
 import { prisma } from './db.js';
 import { requireBuildingMember, requireUser } from './auth.js';
-import { asyncRoute, idSchema, readingSchema, validate } from './http.js';
-import { getEnergySummary, SUMMARY_GRANULARITY } from './energyService.js';
+import { asyncRoute, dateSchema, electricityRateSchema, idSchema, readingPatchSchema, readingSchema, validate } from './http.js';
+import { estimateGridCost, getBuildingComparison, getEnergySummary, SUMMARY_GRANULARITY } from './energyService.js';
+import { parseReadingCsv, serializeReadingCsv } from './csvReadings.js';
 import { z } from 'zod';
 
 export const router = Router();
@@ -14,15 +13,18 @@ const buildingBody = z.object({
   address: z.string().trim().max(500).nullable().optional(),
   timezone: z.string().trim().min(1).max(100).default('UTC')
 });
-const listQuery = z.object({ from: z.iso.datetime({ offset: true }).optional(), to: z.iso.datetime({ offset: true }).optional() });
-const metricRow = z.object({
-  periodStart: z.iso.datetime({ offset: true }), periodEnd: z.iso.datetime({ offset: true }),
-  generatedKwh: z.coerce.number().nonnegative(), consumedKwh: z.coerce.number().nonnegative(),
-  gridImportKwh: z.preprocess(v => v === '' ? null : v, z.coerce.number().nonnegative().nullable().optional()),
-  batteryChargeKwh: z.preprocess(v => v === '' ? null : v, z.coerce.number().nonnegative().nullable().optional()),
-  batteryDischargeKwh: z.preprocess(v => v === '' ? null : v, z.coerce.number().nonnegative().nullable().optional()),
-  source: z.enum(['MANUAL', 'IMPORT', 'API']).default('IMPORT')
-}).refine(x => Date.parse(x.periodEnd) > Date.parse(x.periodStart), { message: 'periodEnd must be after periodStart' });
+const listQuery = z.object({ from: dateSchema.optional(), to: dateSchema.optional() });
+const summaryQuery = listQuery.extend({ electricityRateInrPerKwh: electricityRateSchema.optional() });
+const comparisonQuery = z.object({ from: dateSchema, to: dateSchema, electricityRateInrPerKwh: electricityRateSchema.optional() });
+
+function attachCostEstimate(row, rate) {
+  return {
+    ...row,
+    electricityRateInrPerKwh: rate ?? null,
+    estimatedGridCostInr: estimateGridCost(row.gridImportKwh, rate),
+    estimatedGridCostLabel: rate === undefined ? null : 'Estimate from recorded grid import only; not a utility bill.'
+  };
+}
 
 router.get('/buildings', asyncRoute(async (req, res) => {
   const buildings = await prisma.building.findMany({
@@ -70,7 +72,7 @@ router.patch('/buildings/:buildingId/readings/:readingId', asyncRoute(async (req
   const buildingId = validate(idSchema, req.params.buildingId);
   const readingId = validate(idSchema, req.params.readingId);
   await requireBuildingMember(req.userId, buildingId, true);
-  const body = validate(readingSchema.partial().refine(x => Object.keys(x).length > 0, 'At least one field is required'), req.body);
+  const body = validate(readingPatchSchema, req.body);
   const current = await prisma.energyPeriod.findFirst({ where: { readingId, buildingId }, select: { periodStart: true, periodEnd: true } });
   if (!current) return res.status(404).json({ error: { message: 'Reading not found' } });
   const start = body.periodStart ? new Date(body.periodStart) : current.periodStart;
@@ -98,22 +100,24 @@ router.get('/buildings/:buildingId/summaries/:granularity', asyncRoute(async (re
   const unit = summaryGranularity[req.params.granularity];
   if (!unit) return res.status(400).json({ error: { message: 'granularity must be daily, weekly, or monthly' } });
   await requireBuildingMember(req.userId, buildingId);
-  const { from, to } = validate(listQuery, req.query);
+  const { from, to, electricityRateInrPerKwh } = validate(summaryQuery, req.query);
   if (!from || !to || Date.parse(from) >= Date.parse(to)) return res.status(400).json({ error: { message: 'Valid from and to timestamps are required' } });
   const rows = await getEnergySummary(buildingId, req.userId, unit, new Date(from), new Date(to));
-  res.json({ data: rows });
+  res.json({ data: rows.map(row => attachCostEstimate(row, electricityRateInrPerKwh)) });
+}));
+
+router.get('/buildings/comparison', asyncRoute(async (req, res) => {
+  const { from, to, electricityRateInrPerKwh } = validate(comparisonQuery, req.query);
+  if (Date.parse(from) >= Date.parse(to)) return res.status(400).json({ error: { message: 'from must be before to' } });
+  const rows = await getBuildingComparison(req.userId, new Date(from), new Date(to));
+  res.json({ data: rows.map(row => attachCostEstimate(row, electricityRateInrPerKwh)) });
 }));
 
 router.get('/buildings/:buildingId/readings.csv', asyncRoute(async (req, res) => {
   const buildingId = validate(idSchema, req.params.buildingId);
   await requireBuildingMember(req.userId, buildingId);
   const rows = await prisma.energyPeriod.findMany({ where: { buildingId }, orderBy: { periodStart: 'asc' } });
-  const csv = stringify(rows.map(r => ({
-    periodStart: r.periodStart.toISOString(), periodEnd: r.periodEnd.toISOString(),
-    generatedKwh: r.generatedKwh.toString(), consumedKwh: r.consumedKwh.toString(),
-    gridImportKwh: r.gridImportKwh?.toString() ?? '', batteryChargeKwh: r.batteryChargeKwh?.toString() ?? '',
-    batteryDischargeKwh: r.batteryDischargeKwh?.toString() ?? '', source: r.source
-  })), { header: true });
+  const csv = serializeReadingCsv(rows);
   res.type('text/csv').attachment(`building-${buildingId}-readings.csv`).send(csv);
 }));
 
@@ -122,15 +126,7 @@ router.post('/buildings/:buildingId/readings.csv', asyncRoute(async (req, res) =
   await requireBuildingMember(req.userId, buildingId, true);
   const raw = typeof req.body === 'string' ? req.body : req.body?.csv;
   if (typeof raw !== 'string' || raw.length > 2_000_000) return res.status(400).json({ error: { message: 'Provide CSV text in the csv field (maximum 2 MB)' } });
-  const rows = parse(raw, { columns: true, skip_empty_lines: true, trim: true, bom: true });
-  if (rows.length < 1 || rows.length > 10000) return res.status(400).json({ error: { message: 'CSV must contain 1 to 10000 readings' } });
-  const parsed = rows.map((row, i) => {
-    const result = metricRow.safeParse(row);
-    if (!result.success) {
-      const error = new Error(`Invalid CSV row ${i + 2}`); error.status = 400; error.details = result.error.issues; throw error;
-    }
-    return result.data;
-  });
+  const parsed = parseReadingCsv(raw);
   const created = await prisma.$transaction(parsed.map(r => prisma.energyPeriod.create({ data: {
     buildingId, periodStart: new Date(r.periodStart), periodEnd: new Date(r.periodEnd), generatedKwh: r.generatedKwh,
     consumedKwh: r.consumedKwh, gridImportKwh: r.gridImportKwh ?? null,

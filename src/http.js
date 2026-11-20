@@ -10,7 +10,7 @@ const MAX_KWH = 999_999;
 // in periodEnd). Annual totals should be submitted as 365 daily readings.
 const MAX_PERIOD_MS = 365 * 24 * 60 * 60 * 1000;
 
-export const readingSchema = z.object({
+export const readingFieldsSchema = z.object({
   periodStart: dateSchema,
   periodEnd: dateSchema,
   generatedKwh: z.coerce.number().finite().nonnegative().max(MAX_KWH, {
@@ -23,12 +23,22 @@ export const readingSchema = z.object({
   batteryChargeKwh: z.coerce.number().finite().nonnegative().max(MAX_KWH).nullable().optional(),
   batteryDischargeKwh: z.coerce.number().finite().nonnegative().max(MAX_KWH).nullable().optional(),
   source: z.enum(['MANUAL', 'IMPORT', 'API']).default('MANUAL')
-}).refine(v => Date.parse(v.periodEnd) > Date.parse(v.periodStart), {
+});
+
+export const readingSchema = readingFieldsSchema.refine(v => Date.parse(v.periodEnd) > Date.parse(v.periodStart), {
   message: 'periodEnd must be after periodStart', path: ['periodEnd']
 }).refine(
   v => (Date.parse(v.periodEnd) - Date.parse(v.periodStart)) <= MAX_PERIOD_MS,
   { message: 'Reading period must not exceed 365 days', path: ['periodEnd'] }
 );
+
+export const readingPatchSchema = readingFieldsSchema.partial()
+  .refine(v => Object.keys(v).length > 0, 'At least one field is required');
+
+export const electricityRateSchema = z.string()
+  .regex(/^(?:0|[1-9]\d{0,3})(?:\.\d{1,4})?$/, 'Rate must be a nonnegative amount with up to four decimal places')
+  .transform(Number)
+  .refine(value => value <= 1000, 'Rate must not exceed 1000 INR per kWh');
 
 export function validate(schema, value) {
   const result = schema.safeParse(value);

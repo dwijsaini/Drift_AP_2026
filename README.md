@@ -2,7 +2,7 @@
 
 Drift is a solar balance monitor for homes and buildings. It compares energy generated with energy consumed over the same periods and helps users follow the balance over time.
 
-The AP project is being built in stages. The first stage is a small browser prototype for entering interval readings and viewing generation, consumption, balance, and solar coverage. Data in this prototype stays in the browser's local storage; the REST API and database connection will be added in a later stage.
+The AP project includes a browser prototype and an Express/Prisma REST API for buildings and interval readings. The prototype's local-storage data remains browser-local; the API persists readings in PostgreSQL.
 
 The DBMS project materials are in [`dbms/`](dbms/): normalization, ER diagram, PostgreSQL schema, example API queries, and a timing report template. The timings must be filled from actual runs of the implemented database; no sample timings are presented as measured results.
 
@@ -23,4 +23,4 @@ Open [`frontend/index.html`](frontend/index.html) in a browser. Add a building n
 
 ## Run the REST API
 
-The API uses the existing Prisma/PostgreSQL building, membership, and energy-period models. Copy `.env.example` to `.env`, set `DATABASE_URL`, then run `npm install`, `npm run db:push`, `npm run db:seed`, and `npm run dev`. See [`docs/api.md`](docs/api.md) for routes, CSV format, summary metrics, and the local identity-header limitation.
+The API uses the existing Prisma/PostgreSQL building, membership, and energy-period models. Copy `.env.example` to `.env`, set `DATABASE_URL`, then run `npm install`, `npm run db:push`, `npm run db:seed`, and `npm run dev`. See [`docs/api.md`](docs/api.md) for routes, CSV format, summary/comparison metrics, and authentication details.

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeEnergyMetrics, getEnergySummary, SUMMARY_GRANULARITY } from '../src/energyService.js';
-import { readingSchema, validate } from '../src/http.js';
+import { computeEnergyMetrics, estimateGridCost, getBuildingComparison, getEnergySummary, SUMMARY_GRANULARITY, withCompleteness } from '../src/energyService.js';
+import { electricityRateSchema, readingSchema, validate } from '../src/http.js';
+import { CSV_READING_HEADERS, parseReadingCsv, serializeReadingCsv } from '../src/csvReadings.js';
 import { prisma } from '../src/db.js';
 
 test('computeEnergyMetrics calculates correct balance, gap, and solar coverage', () => {
@@ -86,6 +87,70 @@ test('readingSchema validates interval and kWh constraints', () => {
   assert.equal(resSource.success, false);
 });
 
+test('completeness preserves hasGap and reports the missing hourly period count', () => {
+  assert.deepEqual(withCompleteness({ readingCount: 21n, expectedReadingCount: 24n }), {
+    readingCount: 21, expectedReadingCount: 24, missingPeriodCount: 3, hasGap: true
+  });
+  assert.deepEqual(withCompleteness({ readingCount: 24n, expectedReadingCount: 24n }), {
+    readingCount: 24, expectedReadingCount: 24, missingPeriodCount: 0, hasGap: false
+  });
+  assert.deepEqual(withCompleteness({ readingCount: 0n, expectedReadingCount: 0n }), {
+    readingCount: 0, expectedReadingCount: 0, missingPeriodCount: 0, hasGap: false
+  });
+});
+
+test('summary service returns empty buckets and explicit completeness fields', async () => {
+  const originalQueryRaw = prisma.$queryRaw;
+  prisma.$queryRaw = async () => [{
+    periodStart: new Date('2026-10-01T00:00:00Z'), periodEnd: new Date('2026-10-02T00:00:00Z'),
+    timezone: 'Asia/Kolkata', generatedKwh: 0, consumedKwh: 0, energyBalanceKwh: 0,
+    energyGapKwh: 0, solarCoveragePct: null, gridImportKwh: null, readingCount: 0n,
+    gridImportReadingCount: 0n, expectedReadingCount: 24n
+  }];
+  try {
+    const [row] = await getEnergySummary(1n, 1n, SUMMARY_GRANULARITY.daily,
+      new Date('2026-10-01T00:00:00Z'), new Date('2026-10-02T00:00:00Z'));
+    assert.equal(row.readingCount, 0);
+    assert.equal(row.expectedReadingCount, 24);
+    assert.equal(row.missingPeriodCount, 24);
+    assert.equal(row.hasGap, true);
+  } finally {
+    prisma.$queryRaw = originalQueryRaw;
+  }
+});
+
+test('electricity rate validation and recorded-grid cost estimate are explicit and precise', () => {
+  assert.equal(validate(electricityRateSchema, '8.2500'), 8.25);
+  assert.equal(electricityRateSchema.safeParse('-1').success, false);
+  assert.equal(electricityRateSchema.safeParse('1000.01').success, false);
+  assert.equal(electricityRateSchema.safeParse('1.12345').success, false);
+  assert.equal(estimateGridCost('12.345', 8.25), '101.85');
+  assert.equal(estimateGridCost(null, 8.25), null);
+  assert.equal(estimateGridCost('12.345', undefined), null);
+});
+
+test('CSV import shares reading validation and treats blank optional meter values as null', () => {
+  const csv = [
+    'periodStart,periodEnd,generatedKwh,consumedKwh,gridImportKwh,batteryChargeKwh,batteryDischargeKwh,source',
+    '2026-10-01T10:00:00+05:30,2026-10-01T11:00:00+05:30,3.5,2.1,,,,IMPORT'
+  ].join('\n');
+  const [reading] = parseReadingCsv(csv);
+  assert.equal(reading.gridImportKwh, null);
+  assert.equal(reading.source, 'IMPORT');
+  assert.throws(() => parseReadingCsv('periodStart,generatedKwh\ninvalid,1'), { status: 400 });
+  assert.throws(() => parseReadingCsv(csv.replace('3.5,2.1', '-3.5,2.1')), { status: 400 });
+  const emptyExport = `${CSV_READING_HEADERS.join(',')}\n`;
+  assert.equal(serializeReadingCsv([]), emptyExport, 'empty export still provides import-compatible headers');
+  assert.throws(() => parseReadingCsv(emptyExport), { status: 400 });
+  const roundTrip = parseReadingCsv(serializeReadingCsv([{
+    periodStart: new Date('2026-10-01T04:30:00Z'), periodEnd: new Date('2026-10-01T05:30:00Z'),
+    generatedKwh: '3.500', consumedKwh: '2.100', gridImportKwh: null,
+    batteryChargeKwh: null, batteryDischargeKwh: null, source: 'IMPORT'
+  }]));
+  assert.equal(roundTrip[0].gridImportKwh, null);
+  assert.equal(roundTrip[0].generatedKwh, 3.5);
+});
+
 test('getEnergySummary aggregates daily, weekly, and monthly summaries with gap detection', async (t) => {
   try {
     // Check if database is accessible
@@ -115,6 +180,9 @@ test('getEnergySummary aggregates daily, weekly, and monthly summaries with gap 
     assert.ok('solarCoveragePct' in row, 'Should have solarCoveragePct');
     assert.ok(typeof row.readingCount === 'number', 'readingCount should be a number');
     assert.ok(typeof row.hasGap === 'boolean', 'hasGap should be a boolean');
+    assert.ok(typeof row.expectedReadingCount === 'number', 'expectedReadingCount should be a number');
+    assert.ok(typeof row.missingPeriodCount === 'number', 'missingPeriodCount should be a number');
+    assert.equal(row.hasGap, row.missingPeriodCount > 0, 'hasGap remains consistent with missing count');
   }
 
   // Weekly
@@ -129,4 +197,10 @@ test('getEnergySummary aggregates daily, weekly, and monthly summaries with gap 
   const nonMemberUser = 999999n;
   const unauthorized = await getEnergySummary(buildingId, nonMemberUser, SUMMARY_GRANULARITY.daily, from, to);
   assert.equal(unauthorized.length, 0, 'Unauthorized user should see 0 rows');
+
+  const comparison = await getBuildingComparison(userId, from, to);
+  assert.ok(comparison.length >= 1, 'Comparison includes accessible buildings');
+  assert.ok(comparison.every(row => typeof row.missingPeriodCount === 'number' && typeof row.hasGap === 'boolean'));
+  const hiddenComparison = await getBuildingComparison(nonMemberUser, from, to);
+  assert.deepEqual(hiddenComparison, [], 'Comparison excludes buildings with no membership');
 });
