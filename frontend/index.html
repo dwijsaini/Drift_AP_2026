@@ -14,6 +14,11 @@
       <a class="brand" href="#top" aria-label="Drift home"><span class="brand-mark">d</span><span>drift<span class="brand-dot">.</span></span></a>
       <div class="workspace-label">WORKSPACE</div>
       <label class="building-picker"><span class="building-icon">⌂</span><span><small>BUILDING</small><select id="building-select" aria-label="Select building"></select></span></label><button id="manage-building" class="text-button" type="button">Manage building</button>
+      <form id="building-form" class="building-form" hidden>
+        <label for="building-name">Building name</label>
+        <input id="building-name" name="name" type="text" maxlength="120" placeholder="e.g. Riverside Home" required>
+        <div><button class="button button-green" type="submit">Save building</button><button id="cancel-building" class="text-button" type="button">Cancel</button></div>
+      </form>
       <nav class="nav-links" aria-label="Main navigation">
         <a class="nav-link active" href="#overview"><span>◫</span> Overview</a>
         <a class="nav-link" href="#readings"><span>⌁</span> Readings</a>
@@ -22,7 +27,7 @@
     </aside>
 
     <main id="top" class="main-content">
-      <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><span id="mode-status" class="local-badge"><i></i> Saved on this device</span></header>
+      <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><div class="topbar-actions"><span id="mode-status" class="local-badge"><i></i> Saved on this device</span><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch color theme">Dark theme</button></div></header>
       <p id="app-error" class="form-error" role="alert" hidden></p>
 
       <section id="overview" class="intro">
@@ -50,6 +55,13 @@
           </div>
         </div>
         <p id="advanced-status" class="form-error" role="status" hidden></p>
+        <div class="goal-box">
+          <div><h3>Monthly solar goal</h3><p class="form-help">Choose the share of this month’s energy use you want solar to cover.</p></div>
+          <label>Target coverage (%)<input id="monthly-goal-input" type="number" min="1" max="100" step="1" value="80"></label>
+          <label>Monthly surplus target (kWh)<input id="monthly-surplus-input" type="number" min="0" step="0.1" value="0"></label>
+          <div class="goal-progress"><div><strong id="monthly-goal-progress">0%</strong><span id="monthly-goal-label">This month</span></div><progress id="monthly-goal-bar" max="100" value="0"></progress><div class="surplus-goal-line"><span id="monthly-surplus-progress">Surplus: 0 kWh</span><span id="monthly-goal-projection">Projection: —</span></div></div>
+        </div>
+        <div id="quality-alert" class="quality-alert" role="status" hidden></div>
         <div class="advanced-lower">
           <div>
             <h3>Compare buildings</h3>

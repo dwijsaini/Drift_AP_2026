@@ -33,6 +33,20 @@ let buildingTimezone = localTimezone;
 let summaryCache = {};
 let editing = null;
 const RATE_KEY = 'drift.electricity-rate-inr';
+const THEME_KEY = 'drift.theme';
+const themePreference = localStorage.getItem(THEME_KEY)
+  || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+document.documentElement.dataset.theme = themePreference;
+const themeButton = document.querySelector('#theme-toggle');
+themeButton.textContent = themePreference === 'dark' ? 'Light theme' : 'Dark theme';
+themeButton.setAttribute('aria-label', 'Switch to ' + (themePreference === 'dark' ? 'light' : 'dark') + ' theme');
+themeButton.addEventListener('click', () => {
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem(THEME_KEY, theme);
+  themeButton.textContent = theme === 'dark' ? 'Light theme' : 'Dark theme';
+  themeButton.setAttribute('aria-label', 'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' theme');
+});
 const rateInput = document.querySelector('#electricity-rate');
 const advancedStatus = document.querySelector('#advanced-status');
 rateInput.value = localStorage.getItem(RATE_KEY) || '';
@@ -302,10 +316,11 @@ function render() {
     : 'Saved on this device';
   document.querySelector('#manage-building').textContent = apiMode ? 'Add building' : 'Manage building';
   document.querySelector('#clear-data').hidden = apiMode;
-  document.querySelector('#csv-controls').hidden = !apiMode;
+  document.querySelector('#csv-controls').hidden = false;
   document.querySelector('#compare-buildings').hidden = !apiMode;
-  document.querySelector('#import-csv').disabled = !apiMode || !selectedBuildingId || currentRole === 'VIEWER';
-  document.querySelector('#export-csv').disabled = !apiMode || !selectedBuildingId;
+  document.querySelector('#import-csv').disabled = apiMode && (!selectedBuildingId || currentRole === 'VIEWER');
+  document.querySelector('#export-csv').disabled = apiMode
+    ? !selectedBuildingId : state.readings.length === 0;
   document.querySelector('#compare-buildings').disabled = !apiMode || !state.readings.length;
   document.querySelector('#scenario-increase').disabled = false;
   document.querySelector('footer span:last-child').textContent = apiMode
@@ -395,6 +410,60 @@ function render() {
   document.querySelector('#completeness-message').textContent = missingCount
     + ' of ' + expectedCount + ' expected hourly readings are missing in this view.';
 
+  const qualityIssues = [];
+  const chronological = [...state.readings].sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+  let overlapCount = 0;
+  for (let index = 1; index < chronological.length; index += 1) {
+    if (chronological[index].periodStart < chronological[index - 1].periodEnd) overlapCount += 1;
+  }
+  if (overlapCount) qualityIssues.push(overlapCount + ' overlapping reading period' + (overlapCount === 1 ? '' : 's'));
+  const consumptions = chronological.map((row) => numeric(row.consumedKwh)).filter((value) => value > 0).sort((a, b) => a - b);
+  if (consumptions.length >= 4) {
+    const median = consumptions[Math.floor(consumptions.length / 2)];
+    const unusualCount = chronological.filter((row) => numeric(row.consumedKwh) > median * 3).length;
+    if (unusualCount) qualityIssues.push(unusualCount + ' unusually high consumption reading' + (unusualCount === 1 ? '' : 's') + ' (over 3× the median)');
+  }
+  if (completenessRows.length && missingCount) qualityIssues.push(missingCount + ' missing hourly reading' + (missingCount === 1 ? '' : 's'));
+  const qualityAlert = document.querySelector('#quality-alert');
+  qualityAlert.hidden = qualityIssues.length === 0;
+  qualityAlert.textContent = qualityIssues.length
+    ? 'Data quality: ' + qualityIssues.join(' · ') + '. Review the readings below.'
+    : 'Data quality looks good for the loaded readings.';
+
+  const goalInput = document.querySelector('#monthly-goal-input');
+  const goalKey = 'drift.monthly-coverage-goal.' + (selectedBuildingId || 'preview');
+  const surplusInput = document.querySelector('#monthly-surplus-input');
+  const surplusKey = 'drift.monthly-surplus-goal.' + (selectedBuildingId || 'preview');
+  const savedGoal = localStorage.getItem(goalKey);
+  const savedSurplusGoal = localStorage.getItem(surplusKey);
+  if (savedGoal && document.activeElement !== goalInput) goalInput.value = savedGoal;
+  if (savedSurplusGoal && document.activeElement !== surplusInput) surplusInput.value = savedSurplusGoal;
+  const goalTarget = Math.min(100, Math.max(1, Number(goalInput.value) || 80));
+  const now = new Date();
+  const monthPrefix = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const monthRows = state.readings.filter((row) => row.periodStart.slice(0, 7) === monthPrefix);
+  const monthGenerated = monthRows.reduce((sum, row) => sum + numeric(row.generatedKwh), 0);
+  const monthConsumed = monthRows.reduce((sum, row) => sum + numeric(row.consumedKwh), 0);
+  const monthCoverage = monthConsumed > 0 ? monthGenerated / monthConsumed * 100 : 0;
+  const surplusTarget = Math.max(0, Number(surplusInput.value) || 0);
+  const monthSurplus = monthGenerated - monthConsumed;
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const projectedSurplus = monthSurplus / Math.max(1, now.getDate()) * daysInMonth;
+  document.querySelector('#monthly-goal-progress').textContent = displayNumber(monthCoverage) + '%';
+  document.querySelector('#monthly-goal-label').textContent = monthRows.length
+    ? displayNumber(Math.min(100, monthCoverage / goalTarget * 100)) + '% of ' + goalTarget + '% target'
+    : 'No readings recorded this month';
+  const goalBar = document.querySelector('#monthly-goal-bar');
+  goalBar.value = Math.min(100, monthCoverage / goalTarget * 100);
+  goalBar.classList.toggle('goal-met', monthCoverage >= goalTarget);
+  document.querySelector('#monthly-surplus-progress').textContent =
+    'Surplus: ' + displayNumber(monthSurplus) + ' / ' + displayNumber(surplusTarget) + ' kWh';
+  document.querySelector('#monthly-goal-projection').textContent = !monthRows.length
+    ? 'Projection: waiting for readings'
+    : surplusTarget === 0 || projectedSurplus >= surplusTarget
+      ? 'Projection: on track'
+      : 'Projection: at risk (' + displayNumber(projectedSurplus) + ' kWh)';
+
   const rate = selectedRate();
   const meterRows = readings.filter((row) => row.gridImportKwh != null);
   const hasGridData = meterRows.length > 0;
@@ -462,12 +531,24 @@ async function deleteReading(reading) {
   }
 }
 
-document.querySelector('#manage-building').addEventListener('click', async () => {
-  const name = window.prompt(
-    adapter.mode === 'api' ? 'New building name' : 'Building name',
-    adapter.mode === 'api' ? '' : state.buildingName,
-  );
-  if (!name?.trim()) return;
+const buildingForm = document.querySelector('#building-form');
+const buildingNameInput = document.querySelector('#building-name');
+
+document.querySelector('#manage-building').addEventListener('click', () => {
+  buildingNameInput.value = adapter.mode === 'api' ? '' : state.buildingName;
+  buildingForm.hidden = !buildingForm.hidden;
+  if (!buildingForm.hidden) buildingNameInput.focus();
+});
+
+document.querySelector('#cancel-building').addEventListener('click', () => {
+  buildingForm.hidden = true;
+  showError('');
+});
+
+buildingForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const name = buildingNameInput.value.trim();
+  if (!name) return;
   try {
     if (adapter.mode === 'api') {
       const building = await adapter.createBuilding({
@@ -478,6 +559,7 @@ document.querySelector('#manage-building').addEventListener('click', async () =>
       state.buildingName = name.trim();
       adapter.local.save(state);
     }
+    buildingForm.hidden = true;
     showError('');
     render();
   } catch (error) {
@@ -498,6 +580,16 @@ document.querySelector('#building-select').addEventListener('change', async (eve
 
 document.querySelector('#range-select').addEventListener('change', render);
 document.querySelector('#scenario-increase').addEventListener('input', render);
+document.querySelector('#monthly-goal-input').addEventListener('input', (event) => {
+  const value = Math.min(100, Math.max(1, Number(event.target.value) || 80));
+  localStorage.setItem('drift.monthly-coverage-goal.' + (selectedBuildingId || 'preview'), String(value));
+  render();
+});
+document.querySelector('#monthly-surplus-input').addEventListener('input', (event) => {
+  const value = Math.max(0, Number(event.target.value) || 0);
+  localStorage.setItem('drift.monthly-surplus-goal.' + (selectedBuildingId || 'preview'), String(value));
+  render();
+});
 rateInput.addEventListener('change', async () => {
   const value = rateInput.value.trim();
   if (value !== '' && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > 1000)) {
@@ -636,11 +728,13 @@ document.querySelector('#compare-buildings').addEventListener('click', async () 
 
 document.querySelector('#export-csv').addEventListener('click', async () => {
   try {
-    const blob = await adapter.exportCsv(selectedBuildingId);
+    const blob = await adapter.exportCsv(adapter.mode === 'api' ? selectedBuildingId : null);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'drift-building-' + selectedBuildingId + '-readings.csv';
+    link.download = adapter.mode === 'api'
+      ? 'drift-building-' + selectedBuildingId + '-readings.csv'
+      : 'drift-preview-readings.csv';
     link.click();
     URL.revokeObjectURL(url);
     showAdvancedStatus('CSV export downloaded.');
@@ -653,8 +747,12 @@ document.querySelector('#import-csv').addEventListener('change', async (event) =
   const file = event.target.files?.[0];
   if (!file) return;
   try {
-    const result = await adapter.importCsv(selectedBuildingId, await file.text());
-    await refreshApiData();
+    const result = await adapter.importCsv(
+      adapter.mode === 'api' ? selectedBuildingId : null,
+      await file.text(),
+    );
+    if (adapter.mode === 'api') await refreshApiData();
+    else state = normalizeLocalState(adapter.local.load());
     render();
     showAdvancedStatus('Imported ' + result.imported + ' readings.');
   } catch (error) {
