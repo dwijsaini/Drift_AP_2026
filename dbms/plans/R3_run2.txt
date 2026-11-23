@@ -1,0 +1,28 @@
+                                                                                               QUERY PLAN                                                                                               
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=999.09..1458.89 rows=8758 width=140) (actual time=3.429..4.604 rows=53.00 loops=1)
+   Group Key: ((date_trunc('week'::text, (ep.period_start AT TIME ZONE b.timezone)))::date)
+   Buffers: shared hit=122
+   ->  Sort  (cost=999.09..1020.99 rows=8758 width=22) (actual time=3.404..3.584 rows=8760.00 loops=1)
+         Sort Key: ((date_trunc('week'::text, (ep.period_start AT TIME ZONE b.timezone)))::date)
+         Sort Method: quicksort  Memory: 772kB
+         Buffers: shared hit=122
+         ->  Nested Loop  (cost=0.00..425.60 rows=8758 width=22) (actual time=0.017..3.003 rows=8760.00 loops=1)
+               Buffers: shared hit=119
+               ->  Nested Loop  (cost=0.00..2.04 rows=1 width=21) (actual time=0.005..0.005 rows=1.00 loops=1)
+                     Buffers: shared hit=2
+                     ->  Seq Scan on building_members bm  (cost=0.00..1.01 rows=1 width=8) (actual time=0.002..0.002 rows=1.00 loops=1)
+                           Filter: ((building_id = 4) AND (user_id = 4))
+                           Buffers: shared hit=1
+                     ->  Seq Scan on buildings b  (cost=0.00..1.01 rows=1 width=21) (actual time=0.002..0.002 rows=1.00 loops=1)
+                           Filter: (building_id = 4)
+                           Buffers: shared hit=1
+               ->  Seq Scan on energy_periods ep  (cost=0.00..270.30 rows=8758 width=26) (actual time=0.002..0.522 rows=8760.00 loops=1)
+                     Filter: ((period_start >= '2025-01-01 00:00:00+05:30'::timestamp with time zone) AND (period_start < '2026-01-01 00:00:00+05:30'::timestamp with time zone) AND (building_id = 4))
+                     Buffers: shared hit=117
+ Planning:
+   Buffers: shared hit=245
+ Planning Time: 0.446 ms
+ Execution Time: 4.650 ms
+(24 rows)
+
