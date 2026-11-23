@@ -13,7 +13,14 @@ const buildingBody = z.object({
   address: z.string().trim().max(500).nullable().optional(),
   timezone: z.string().trim().min(1).max(100).default('UTC')
 });
-const listQuery = z.object({ from: dateSchema.optional(), to: dateSchema.optional() });
+const listQuery = z.object({
+  from: dateSchema.optional(), to: dateSchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  search: z.string().trim().max(100).default(''),
+  sortBy: z.enum(['periodStart','generatedKwh','consumedKwh']).default('periodStart'),
+  sortOrder: z.enum(['asc','desc']).default('desc')
+});
 const summaryQuery = listQuery.extend({ electricityRateInrPerKwh: electricityRateSchema.optional() });
 const comparisonQuery = z.object({ from: dateSchema, to: dateSchema, electricityRateInrPerKwh: electricityRateSchema.optional() });
 
@@ -46,13 +53,19 @@ router.post('/buildings', asyncRoute(async (req, res) => {
 router.get('/buildings/:buildingId/readings', asyncRoute(async (req, res) => {
   const buildingId = validate(idSchema, req.params.buildingId);
   await requireBuildingMember(req.userId, buildingId);
-  const { from, to } = validate(listQuery, req.query);
+  const { from, to, page, pageSize, search, sortBy, sortOrder } = validate(listQuery, req.query);
   if (from && to && Date.parse(from) >= Date.parse(to)) return res.status(400).json({ error: { message: 'from must be before to' } });
-  const rows = await prisma.energyPeriod.findMany({
-    where: { buildingId, ...(from || to ? { periodStart: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lt: new Date(to) } : {}) } } : {}) },
-    orderBy: { periodStart: 'asc' }
-  });
-  res.json({ data: rows });
+  const where = { buildingId, AND: [
+    ...(from || to ? [{ periodStart: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lt: new Date(to) } : {}) } }] : []),
+    ...(search ? [{ OR: [
+      ...(Number.isFinite(Date.parse(search)) && /^\d{4}-\d{2}-\d{2}$/.test(search)
+        ? [{ periodStart: { gte: new Date(search + 'T00:00:00Z'), lt: new Date(Date.parse(search + 'T00:00:00Z') + 86400000) } }] : []),
+      ...(Number.isFinite(Number(search)) ? [{ generatedKwh: Number(search) }, { consumedKwh: Number(search) }] : [])
+    ] }] : [])
+  ] };
+  const rows = await prisma.energyPeriod.findMany({ where,
+    orderBy: { [sortBy]: sortOrder }, skip: (page - 1) * pageSize, take: pageSize + 1 });
+  res.json({ data: rows.slice(0, pageSize), meta: { page, pageSize, hasMore: rows.length > pageSize } });
 }));
 
 router.post('/buildings/:buildingId/readings', asyncRoute(async (req, res) => {
@@ -116,7 +129,10 @@ router.get('/buildings/comparison', asyncRoute(async (req, res) => {
 router.get('/buildings/:buildingId/readings.csv', asyncRoute(async (req, res) => {
   const buildingId = validate(idSchema, req.params.buildingId);
   await requireBuildingMember(req.userId, buildingId);
-  const rows = await prisma.energyPeriod.findMany({ where: { buildingId }, orderBy: { periodStart: 'asc' } });
+  const { from, to } = validate(listQuery, req.query);
+  if (from && to && Date.parse(from) >= Date.parse(to)) return res.status(400).json({ error: { message: 'from must be before to' } });
+  const rows = await prisma.energyPeriod.findMany({ where: { buildingId,
+    ...(from || to ? { periodStart: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lt: new Date(to) } : {}) } } : {}) }, orderBy: { periodStart: 'asc' } });
   const csv = serializeReadingCsv(rows);
   res.type('text/csv').attachment(`building-${buildingId}-readings.csv`).send(csv);
 }));

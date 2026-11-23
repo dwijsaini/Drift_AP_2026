@@ -29,7 +29,9 @@ function generateHomeReadings(buildingId, startDate, hours) {
     let generatedKwh = 0;
     if (hour >= 6 && hour <= 19) {
       const angle = Math.PI * (hour - 6) / 13;      // 0..π over daylight hours
-      const rawPeak = 4.5 + 0.3 * Math.sin(h * 0.07); // slight day-to-day variation
+      const day = Math.floor(h / 24);
+      const weatherFactor = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(day * 0.41));
+      const rawPeak = (4.5 + 0.25 * Math.sin(day * 0.73)) * weatherFactor;
       generatedKwh = Math.max(0, rawPeak * Math.sin(angle));
     }
 
@@ -72,7 +74,9 @@ function generateOfficeReadings(buildingId, startDate, hours) {
     let generatedKwh = 0;
     if (hour >= 6 && hour <= 19) {
       const angle = Math.PI * (hour - 6) / 13;
-      const rawPeak = 12.0 + 0.5 * Math.sin(h * 0.05);
+      const day = Math.floor(h / 24);
+      const weatherFactor = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(day * 0.41));
+      const rawPeak = (12.0 + 0.4 * Math.sin(day * 0.73)) * weatherFactor;
       generatedKwh = Math.max(0, rawPeak * Math.sin(angle));
     }
 

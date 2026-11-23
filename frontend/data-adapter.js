@@ -16,6 +16,15 @@ async function request(path, init = {}) {
   return body?.data ?? body;
 }
 
+async function requestPage(path) {
+  const headers = new Headers();
+  if (apiUserId) headers.set('X-User-Id', apiUserId);
+  const response = await fetch('/api' + path, { headers });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body?.error?.message || 'Request failed (' + response.status + ')');
+  return { data: body.data || [], meta: body.meta || {} };
+}
+
 const local = {
   load() {
     try { return JSON.parse(localStorage.getItem(KEY)) || { buildingName: 'My home', readings: [] }; }
@@ -85,7 +94,7 @@ function parseCsv(text) {
     const record = Object.fromEntries(CSV_HEADERS.map((header, column) => [header, values[column]]));
     for (const field of ['generatedKwh', 'consumedKwh']) {
       const number = Number(record[field]);
-      if (record[field] === '' || !Number.isFinite(number) || number < 0) {
+      if (record[field] === '' || !Number.isFinite(number) || number < 0 || number > 999999) {
         throw new Error('Invalid ' + field + ' in CSV row ' + (index + 2) + '.');
       }
       record[field] = number;
@@ -94,7 +103,7 @@ function parseCsv(text) {
       if (record[field] === '') record[field] = null;
       else {
         const number = Number(record[field]);
-        if (!Number.isFinite(number) || number < 0) {
+        if (!Number.isFinite(number) || number < 0 || number > 999999) {
           throw new Error('Invalid ' + field + ' in CSV row ' + (index + 2) + '.');
         }
         record[field] = number;
@@ -102,7 +111,7 @@ function parseCsv(text) {
     }
     const start = Date.parse(record.periodStart);
     const end = Date.parse(record.periodEnd);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 365 * 86400000) {
       throw new Error('Invalid period in CSV row ' + (index + 2) + '.');
     }
     record.periodStart = toLocalDateTime(start);
@@ -153,8 +162,9 @@ function importLocalCsv(text) {
   return { imported: imported.length };
 }
 
-function exportLocalCsv() {
-  return new Blob([localCsvRows(local.load().readings)], { type: 'text/csv;charset=utf-8' });
+function exportLocalCsv(from, to) {
+  const rows = local.load().readings.filter((row) => (!from || row.periodStart >= from) && (!to || row.periodStart < to));
+  return new Blob([localCsvRows(rows)], { type: 'text/csv;charset=utf-8' });
 }
 
 export const adapter = {
@@ -170,8 +180,13 @@ export const adapter = {
   createBuilding(value) {
     return request('/buildings', { method: 'POST', body: JSON.stringify(value) });
   },
-  readings(buildingId) {
-    return request('/buildings/' + encodeURIComponent(buildingId) + '/readings');
+  readings(buildingId, filters = {}) {
+    const query = queryString(filters);
+    return request('/buildings/' + encodeURIComponent(buildingId) + '/readings?' + query);
+  },
+  readingPage(buildingId, filters = {}) {
+    const query = queryString(filters);
+    return requestPage('/buildings/' + encodeURIComponent(buildingId) + '/readings?' + query);
   },
   createReading(buildingId, value) {
     return request('/buildings/' + encodeURIComponent(buildingId) + '/readings', {
@@ -201,11 +216,12 @@ export const adapter = {
       method: 'POST', body: JSON.stringify({ csv }),
     });
   },
-  async exportCsv(buildingId) {
-    if (!apiMode) return exportLocalCsv();
+  async exportCsv(buildingId, from, to) {
+    if (!apiMode) return exportLocalCsv(from, to);
     const headers = new Headers();
     if (apiUserId) headers.set('X-User-Id', apiUserId);
-    const response = await fetch('/api/buildings/' + encodeURIComponent(buildingId) + '/readings.csv', { headers });
+    const query = queryString({ from, to });
+    const response = await fetch('/api/buildings/' + encodeURIComponent(buildingId) + '/readings.csv' + (query ? '?' + query : ''), { headers });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       throw new Error(body?.error?.message || 'CSV export failed (' + response.status + ')');

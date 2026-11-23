@@ -192,7 +192,7 @@ All IDs are positive integer strings in JSON. Energy metrics are returned in kWh
 | `GET /health` | Public | API and database health status. |
 | `GET /api/buildings` | Member | List caller's accessible buildings and assigned roles. |
 | `POST /api/buildings` | Signed-in user | Create building and assign caller as `OWNER`. Body: `{ "name", "address?", "timezone?" }`. |
-| `GET /api/buildings/:buildingId/readings?from=&to=` | Member | List interval readings ordered chronologically; optional ISO bounds. |
+| `GET /api/buildings/:buildingId/readings?from=&to=&page=&pageSize=&search=&sortBy=&sortOrder=` | Member | List interval readings with bounded pagination (default 50, max 100), period-start search, ISO date bounds, and sorting by period start/generated/consumed values. |
 | `POST /api/buildings/:buildingId/readings` | OWNER/EDITOR | Record new interval reading. Body conforms to `readingSchema`. |
 | `PATCH /api/buildings/:buildingId/readings/:readingId` | OWNER/EDITOR | Partially update reading fields while verifying interval ordering. |
 | `DELETE /api/buildings/:buildingId/readings/:readingId` | OWNER/EDITOR | Delete specific interval reading. |
@@ -200,6 +200,8 @@ All IDs are positive integer strings in JSON. Energy metrics are returned in kWh
 | `GET /api/buildings/comparison?from=&to=&electricityRateInrPerKwh=` | Member | Compare totals for all caller-accessible buildings over the same range. Rate is optional. |
 | `GET /api/buildings/:buildingId/readings.csv` | Member | Export all building readings as downloadable CSV. |
 | `POST /api/buildings/:buildingId/readings.csv` | OWNER/EDITOR | Bulk import readings via CSV payload atomically in a single transaction. |
+
+The readings list accepts `page` (1-based, default 1), `pageSize` (default 50, maximum 100), `search` (date `YYYY-MM-DD` or exact generated/consumed kWh), `sortBy` (`periodStart`, `generatedKwh`, `consumedKwh`), and `sortOrder` (`asc` or `desc`). `from` is inclusive and `to` is exclusive. The response includes `meta.page`, `meta.pageSize`, and `meta.hasMore`.
 
 The CSV import/export routes are shared by both features: import validates the exact header order and applies the JSON reading constraints (period duration and kWh limits included); blank optional meter fields remain `null`. Export emits those same headers. Reading or exporting requires membership; import requires OWNER or EDITOR. It accepts JSON `{ "csv": "..." }`, 1–10,000 rows, and a 2 MB payload limit.
 

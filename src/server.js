@@ -17,6 +17,7 @@ app.get('/health', async (_req, res, next) => {
 });
 app.use('/api', router);
 const frontendDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../frontend');
+app.get('/docs', (_req, res) => res.sendFile(path.resolve(frontendDirectory, '../docs/api.html')));
 app.use(express.static(frontendDirectory));
 app.use((req, res) => res.status(404).json({ error: { message: 'Route not found' } }));
 app.use(errorMiddleware);

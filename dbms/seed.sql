@@ -49,8 +49,12 @@ BEGIN
       CROSS JOIN LATERAL (
           SELECT TIMESTAMPTZ '2025-01-01 00:00:00+05:30'
                      + s.hour_number * interval '1 hour' AS starts_at,
-                 round((1 + mod(s.hour_number, 20)::numeric / 10), 3) AS generated_kwh,
-                 round((2 + mod(s.hour_number * 7, 25)::numeric / 10), 3) AS consumed_kwh
+                 round(greatest(0, (4.5 + 0.35 * sin(floor(s.hour_number / 24)::numeric * 0.73))
+                   * (0.45 + 0.55 * (0.5 + 0.5 * sin(floor(s.hour_number / 24)::numeric * 0.41)))
+                   * sin(pi() * (mod(s.hour_number, 24) - 6)::numeric / 13)), 3) AS generated_kwh,
+                 round(greatest(0.4, 1.25 + CASE WHEN mod(s.hour_number, 24) BETWEEN 18 AND 22 THEN 1.0 ELSE 0 END
+                   + CASE WHEN mod(s.hour_number, 24) BETWEEN 7 AND 9 THEN 0.45 ELSE 0 END
+                   + 0.12 * sin(s.hour_number::numeric * 1.31)), 3) AS consumed_kwh
       ) AS energy
     ON CONFLICT (building_id, period_start, period_end) DO NOTHING;
 END;

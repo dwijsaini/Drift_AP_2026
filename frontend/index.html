@@ -12,7 +12,7 @@
   <div class="shell">
     <aside class="sidebar">
       <a class="brand" href="#top" aria-label="Drift home"><span class="brand-mark">d</span><span>drift<span class="brand-dot">.</span></span></a>
-      <div class="workspace-label">WORKSPACE</div>
+      <div class="workspace-label">MONITOR</div>
       <label class="building-picker"><span class="building-icon">⌂</span><span><small>BUILDING</small><select id="building-select" aria-label="Select building"></select></span></label><button id="manage-building" class="text-button" type="button">Manage building</button>
       <form id="building-form" class="building-form" hidden>
         <label for="building-name">Building name</label>
@@ -22,12 +22,20 @@
       <nav class="nav-links" aria-label="Main navigation">
         <a class="nav-link active" href="#overview"><span>◫</span> Overview</a>
         <a class="nav-link" href="#readings"><span>⌁</span> Readings</a>
+        <a class="nav-link" href="#generation"><span>☼</span> Generation</a>
+        <small class="workspace-label nav-group-label">ANALYSIS</small>
+        <a class="nav-link" href="#trends"><span>⌁</span> Trends</a>
+        <a class="nav-link" href="#cost-tools"><span>₹</span> Cost</a>
+        <a class="nav-link" href="#comparison-area"><span>⇄</span> Compare</a>
+        <a class="nav-link" href="#goal-area"><span>◎</span> Goals &amp; insights</a>
+        <small class="workspace-label nav-group-label">DATA</small>
+        <a class="nav-link" href="#csv-controls"><span>⇧</span> Import / export CSV</a>
       </nav>
       <div class="sidebar-bottom"><div class="sun-mark">☼</div><p>Small readings.<br><strong>Clearer energy decisions.</strong></p><span class="prototype-tag">FIRST STAGE PREVIEW</span></div>
     </aside>
 
     <main id="top" class="main-content">
-      <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><div class="topbar-actions"><span id="mode-status" class="local-badge"><i></i> Saved on this device</span><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch color theme">Dark theme</button></div></header>
+      <header class="topbar"><a class="brand topbar-brand" href="#top"><span class="brand-mark">☼</span><span>Drift</span></a><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><div class="topbar-actions"><span id="mode-status" class="local-badge"><i></i> Saved on this device</span><div class="mode-switch" role="group" aria-label="Dashboard mode"><a href="?mode=preview" aria-label="Browser preview mode">Browser</a><a href="?mode=api&amp;userId=1" aria-label="API mode">API</a></div><button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch color theme">Dark theme</button><button id="notification-button" class="theme-toggle" type="button" aria-label="Notifications">♧ <span id="notification-count">0</span></button><span class="user-chip"><i></i> Demo user</span></div></header>
       <p id="app-error" class="form-error" role="alert" hidden></p>
 
       <section id="overview" class="intro">
@@ -35,27 +43,42 @@
         <button id="add-reading-top" class="button button-dark" type="button"><span>＋</span> Add reading</button>
       </section>
 
+      <section class="insights-grid" id="generation">
+        <article class="panel"><div class="panel-heading"><div><p class="eyebrow">HOURLY PATTERN</p><h2>Peak-hours balance</h2></div></div><p class="form-help">Balance by hour and weekday. Blue means surplus; orange means deficit. Hatching marks hours without readings.</p><div id="peak-heatmap" class="heatmap" role="grid" aria-label="Hourly balance heatmap"></div><div class="heatmap-legend"><span>Deficit</span><i></i><span>Surplus</span><span>▧ missing reading</span></div></article>
+        <article class="panel"><div class="panel-heading"><div><p class="eyebrow">FROM YOUR READINGS</p><h2>Energy insights</h2></div></div><ul id="insights-list" class="insights-list"><li>Add readings to see insights.</li></ul><label class="factor-control">Grid emission factor (kg CO₂/kWh)<input id="emission-factor" type="number" min="0" max="5" step="0.01" value="0.71"></label><label class="factor-control">Factor source<input id="emission-source" type="text" maxlength="160" value="Example assumption; replace with a published local grid factor"></label><p id="co2-estimate" class="scenario-result">CO₂ avoided estimate: —</p><small>Estimate only. Factor and source are editable; verify them against a published source for your region.</small></article>
+      </section>
+
       <section class="summary-grid" aria-label="Energy summary">
-        <article class="summary-card"><div class="card-top"><span>GENERATED</span><span class="card-icon solar">☼</span></div><div class="metric"><strong id="total-generated">0.0</strong><span>kWh</span></div><p class="card-note">Solar energy produced</p></article>
-        <article class="summary-card"><div class="card-top"><span>CONSUMED</span><span class="card-icon usage">⌁</span></div><div class="metric"><strong id="total-consumed">0.0</strong><span>kWh</span></div><p class="card-note">Energy used by building</p></article>
-        <article class="summary-card balance-card"><div class="card-top"><span>ENERGY BALANCE</span><span class="card-icon balance">↗</span></div><div class="metric"><strong id="total-balance">0.0</strong><span>kWh</span></div><p id="balance-note" class="card-note">Generation minus consumption</p></article>
-        <article class="summary-card coverage-card"><div class="card-top"><span>SOLAR COVERAGE</span><span class="card-icon coverage">◉</span></div><div class="metric"><strong id="solar-coverage">—</strong><span id="coverage-unit">%</span></div><p class="card-note">Share of use covered by solar</p></article>
+        <article class="summary-card"><div class="card-top"><span>Generated</span><span class="card-icon solar">☼</span></div><div class="metric"><strong id="total-generated">0.0</strong><span>kWh</span></div><p class="card-note">Solar energy produced</p><progress id="generated-bar" max="100" value="0"></progress></article>
+        <article class="summary-card"><div class="card-top"><span>Consumed</span><span class="card-icon usage">⌁</span></div><div class="metric"><strong id="total-consumed">0.0</strong><span>kWh</span></div><p class="card-note">Energy used by building</p><progress id="consumed-bar" max="100" value="0"></progress></article>
+        <article class="summary-card balance-card"><div class="card-top"><span>Balance</span><span class="card-icon balance">↗</span></div><div class="metric"><strong id="total-balance">0.0</strong><span>kWh</span></div><p id="balance-note" class="card-note">Generation minus consumption</p><progress id="balance-bar" max="100" value="0"></progress></article>
+        <article class="summary-card coverage-card"><div class="card-top"><span>Coverage</span><span class="card-icon coverage">◉</span></div><svg class="coverage-dial" viewBox="0 0 180 100" role="img" aria-label="Solar coverage gauge"><path class="dial-track" d="M 10 90 A 80 80 0 0 1 170 90"/><path id="coverage-dial-value" class="dial-value" d="M 10 90 A 80 80 0 0 1 170 90"/></svg><div class="metric"><strong id="solar-coverage">—</strong><span id="coverage-unit">%</span></div><p class="card-note">Share of use covered by solar</p><progress id="coverage-bar" max="100" value="0"></progress></article>
+        <article class="summary-card"><div class="card-top"><span>Estimated grid cost</span><span class="card-icon usage">₹</span></div><div class="metric"><strong id="stat-grid-cost">—</strong></div><p class="card-note">Estimate from recorded grid imports</p><progress max="100" value="0"></progress></article>
+        <article class="summary-card"><div class="card-top"><span>Grid import</span><span class="card-icon balance">↘</span></div><div class="metric"><strong id="stat-grid-import">0.0</strong><span>kWh</span></div><p class="card-note">Recorded meter values</p><progress max="100" value="0"></progress></article>
       </section>
 
       <section id="advanced-tools" class="panel advanced-panel" aria-labelledby="advanced-heading">
         <div class="panel-heading"><div><p class="eyebrow">ENERGY INSIGHTS</p><h2 id="advanced-heading">More ways to understand your data</h2></div></div>
         <div class="advanced-grid">
-          <label>Grid electricity rate
+          <label id="cost-tools">Grid electricity rate
             <span class="rate-input"><input id="electricity-rate" type="number" min="0" max="1000" step="0.01" placeholder="e.g. 8.25"><span>INR / kWh</span></span>
           </label>
           <div class="advanced-metric"><span>ESTIMATED GRID COST</span><strong id="estimated-grid-cost">—</strong><small id="grid-cost-note">Enter a rate and add grid-import readings.</small></div>
           <div class="csv-controls" id="csv-controls">
+            <label>Export from<input id="export-from" type="date"></label><label>Export to<input id="export-to" type="date"></label>
             <button id="export-csv" class="button button-dark" type="button">Export CSV</button>
             <label class="button button-green import-button">Import CSV<input id="import-csv" type="file" accept=".csv,text/csv" hidden></label>
           </div>
         </div>
+        <details class="column-chooser"><summary>Export columns</summary><div id="export-columns"><label><input type="checkbox" value="periodStart" checked> Period start</label><label><input type="checkbox" value="periodEnd" checked> Period end</label><label><input type="checkbox" value="generatedKwh" checked> Generated</label><label><input type="checkbox" value="consumedKwh" checked> Consumed</label><label><input type="checkbox" value="gridImportKwh" checked> Grid import</label><label><input type="checkbox" value="batteryChargeKwh" checked> Battery charge</label><label><input type="checkbox" value="batteryDischargeKwh" checked> Battery discharge</label><label><input type="checkbox" value="source" checked> Source</label></div></details>
+        <div class="tariff-box">
+          <div class="panel-heading"><div><p class="eyebrow">BILL ESTIMATE</p><h3>Tariff calculator</h3></div><label><input id="tariff-mode" type="checkbox"> Use example slabs</label></div>
+          <p class="form-help">Example slabs only; edit these to match your DISCOM bill. Not official rates.</p>
+          <div class="table-scroll"><table><thead><tr><th>From units (kWh)</th><th>To units</th><th>Rate (₹/kWh)</th></tr></thead><tbody><tr><td><input class="slab-from" type="number" min="0" value="0"></td><td><input class="slab-to" type="number" min="0" value="100"></td><td><input class="slab-rate" type="number" min="0" step="0.01" value="3.5"></td></tr><tr><td><input class="slab-from" type="number" min="0" value="100"></td><td><input class="slab-to" type="number" min="0" value="300"></td><td><input class="slab-rate" type="number" min="0" step="0.01" value="5.5"></td></tr><tr><td><input class="slab-from" type="number" min="0" value="300"></td><td><input class="slab-to" type="number" min="0" value="100000"></td><td><input class="slab-rate" type="number" min="0" step="0.01" value="7.5"></td></tr></tbody></table></div>
+          <p id="tariff-estimate" class="scenario-result">Example tariff estimate: —</p>
+        </div>
         <p id="advanced-status" class="form-error" role="status" hidden></p>
-        <div class="goal-box">
+        <div class="goal-box" id="goal-area">
           <div><h3>Monthly solar goal</h3><p class="form-help">Choose the share of this month’s energy use you want solar to cover.</p></div>
           <label>Target coverage (%)<input id="monthly-goal-input" type="number" min="1" max="100" step="1" value="80"></label>
           <label>Monthly surplus target (kWh)<input id="monthly-surplus-input" type="number" min="0" step="0.1" value="0"></label>
@@ -63,7 +86,7 @@
         </div>
         <div id="quality-alert" class="quality-alert" role="status" hidden></div>
         <div class="advanced-lower">
-          <div>
+          <div id="comparison-area">
             <h3>Compare buildings</h3>
             <p class="form-help">Compare accessible buildings over the selected building’s recorded date range.</p>
             <button id="compare-buildings" class="button button-dark" type="button">Compare buildings</button>
@@ -76,14 +99,17 @@
               <input id="scenario-increase" type="range" min="0" max="100" step="5" value="0">
             </label>
             <p id="scenario-result" class="scenario-result"></p>
+            <label class="scenario-control">Battery capacity: <strong id="battery-capacity-label">0 kWh</strong><input id="battery-capacity" type="range" min="0" max="50" step="1" value="0"></label>
+            <p id="battery-result" class="scenario-result">Potential grid import avoided: 0 kWh (scenario only).</p>
           </div>
         </div>
       </section>
+      <section class="report-actions"><button id="print-report" class="button button-dark" type="button">Print weekly report</button><button id="demo-data" class="button button-dark" type="button">Load demo data</button><span id="demo-label" hidden>Generated demo data</span><button id="shortcuts-help" class="text-button" type="button">Keyboard shortcuts</button></section>
 
       <section class="content-grid">
-        <article class="panel trend-panel">
+        <article class="panel trend-panel" id="trends">
           <div class="panel-heading"><div><p class="eyebrow">YOUR ENERGY STORY</p><h2>Generation &amp; use</h2></div><label class="select-wrap"><span class="visually-hidden">Trend range</span><select id="range-select"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="all">All readings</option></select></label></div>
-          <div class="chart-legend"><span><i class="legend-generated"></i> Generated</span><span><i class="legend-consumed"></i> Consumed</span></div>
+          <div class="chart-legend"><span><i class="legend-generated"></i> Generated</span><span><i class="legend-consumed"></i> Consumed</span><span><i class="legend-balance"></i> Balance</span></div>
           <div id="chart-empty" class="chart-empty"><span class="empty-sun">☼</span><p>Your energy story starts here.</p><span>Add a reading to see generation and use over time.</span></div>
           <div id="chart-wrap" class="chart-wrap" hidden><canvas id="energy-chart" role="img" aria-label="Bar chart comparing generated and consumed energy"></canvas><div id="chart-labels" class="chart-labels"></div></div>
           <div id="completeness-alert" class="alert" hidden><span>!</span><p id="completeness-message"></p></div>
@@ -106,11 +132,15 @@
 
       <section id="readings" class="panel readings-panel">
         <div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>Your readings</h2></div><button id="clear-data" class="text-button" type="button">Clear local data</button></div>
-        <div class="table-scroll"><table><thead><tr><th>PERIOD</th><th>GENERATED</th><th>CONSUMED</th><th>BALANCE</th><th>COVERAGE</th><th>ACTIONS</th></tr></thead><tbody id="readings-body"></tbody></table></div>
+        <div class="reading-filters"><label>Search<input id="reading-search" type="search" placeholder="Search date or energy"></label><label>From<input id="reading-from" type="date"></label><label>To<input id="reading-to" type="date"></label><label>Sort<select id="reading-sort"><option value="periodStart:desc">Newest first</option><option value="periodStart:asc">Oldest first</option><option value="generatedKwh:desc">Generation high to low</option><option value="consumedKwh:desc">Consumption high to low</option></select></label></div>
+        <div class="table-scroll"><table><thead><tr><th>Period</th><th>Generated</th><th>Consumed</th><th>Balance</th><th>Coverage</th><th>Completeness</th><th>Actions</th></tr></thead><tbody id="readings-body"></tbody></table></div>
         <div id="table-empty" class="table-empty">No readings yet. Add your first time period above.</div>
+        <div class="table-pagination"><button id="reading-prev" class="button button-dark" type="button">Previous</button><span id="reading-page-label">Page 1</span><button id="reading-next" class="button button-dark" type="button">Next</button></div>
       </section>
       <footer><span>Drift · Solar Balance Monitor</span><span>First-stage browser preview · data stays on this device</span></footer>
     </main>
   </div>
+  <dialog id="notification-center" class="app-dialog"><form method="dialog"><button class="dialog-close" aria-label="Close notifications">×</button><h2>Notifications</h2><p>Review missing readings, coverage changes, deficit days, and goal progress here.</p><ul id="notification-list"></ul></form></dialog>
+  <dialog id="command-palette" class="app-dialog palette"><form method="dialog"><label>Quick actions<input id="palette-search" type="search" placeholder="Type a command… (Esc to close)"></label><div><button type="button" data-command="dashboard">Go to dashboard</button><button type="button" data-command="readings">Go to readings</button><button type="button" data-command="export">Export CSV</button><button type="button" data-command="building">Switch building</button></div></form></dialog>
 </body>
 </html>
