@@ -36,21 +36,48 @@ BEGIN
         source, recorded_by_user_id
     )
     SELECT v_building_id,
-           starts_at,
-           starts_at + interval '1 hour',
-           generated_kwh,
-           consumed_kwh,
-           greatest(consumed_kwh - generated_kwh, 0),
-           greatest(generated_kwh - consumed_kwh, 0),
-           greatest(consumed_kwh - generated_kwh, 0) / 2,
+           energy.starts_at,
+           energy.starts_at + interval '1 hour',
+           energy.generated_kwh,
+           energy.consumed_kwh,
+           greatest(energy.consumed_kwh - energy.generated_kwh, 0),
+           greatest(energy.generated_kwh - energy.consumed_kwh, 0),
+           greatest(energy.consumed_kwh - energy.generated_kwh, 0) / 2,
            'API',
            v_user_id
       FROM generate_series(0, 24 * 365 - 1) AS s(hour_number)
       CROSS JOIN LATERAL (
           SELECT TIMESTAMPTZ '2025-01-01 00:00:00+05:30'
                      + s.hour_number * interval '1 hour' AS starts_at,
-                 round((1 + mod(s.hour_number, 20)::numeric / 10), 3) AS generated_kwh,
-                 round((2 + mod(s.hour_number * 7, 25)::numeric / 10), 3) AS consumed_kwh
+                 mod(s.hour_number, 24) AS local_hour,
+                 (s.hour_number / 24) AS day_of_year
+      ) AS t
+      CROSS JOIN LATERAL (
+          SELECT (0.65 + 0.35 * sin((t.day_of_year * 13 + 5)::numeric)
+                               * cos((t.day_of_year * 3)::numeric)) AS weather_factor,
+                 CASE WHEN mod(t.day_of_year, 7) IN (3, 4) THEN 1.25 ELSE 1.0 END AS day_factor
+      ) AS w
+      CROSS JOIN LATERAL (
+          SELECT t.starts_at,
+                 round(
+                     (CASE WHEN t.local_hour >= 6 AND t.local_hour <= 18 THEN
+                         greatest(0::numeric,
+                             (4.8::numeric * w.weather_factor::numeric
+                              * sin(pi() * (t.local_hour - 6)::numeric / 13.0)::numeric)
+                         )
+                     ELSE 0::numeric END)::numeric, 3
+                 ) AS generated_kwh,
+                 round(
+                     (greatest(0.35::numeric,
+                         (CASE
+                             WHEN t.local_hour BETWEEN 7 AND 9 THEN 2.2::numeric
+                             WHEN t.local_hour BETWEEN 18 AND 22 THEN 3.1::numeric
+                             WHEN t.local_hour BETWEEN 10 AND 17 THEN 1.1::numeric
+                             ELSE 0.6::numeric
+                          END * w.day_factor::numeric
+                          + 0.15::numeric * sin((s.hour_number * 1.7)::numeric)::numeric)
+                     ))::numeric, 3
+                 ) AS consumed_kwh
       ) AS energy
     ON CONFLICT (building_id, period_start, period_end) DO NOTHING;
 END;

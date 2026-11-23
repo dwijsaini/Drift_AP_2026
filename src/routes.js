@@ -8,12 +8,32 @@ import { z } from 'zod';
 
 export const router = Router();
 router.use(requireUser);
+const validTimezones = new Set(Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : ['UTC', 'Asia/Kolkata']);
+
 const buildingBody = z.object({
   name: z.string().trim().min(1).max(200),
   address: z.string().trim().max(500).nullable().optional(),
-  timezone: z.string().trim().min(1).max(100).default('UTC')
+  timezone: z.string().trim().min(1).max(100).default('UTC').refine(
+    tz => validTimezones.has(tz) || tz === 'UTC',
+    { message: 'Invalid IANA timezone' }
+  )
 });
-const listQuery = z.object({ from: dateSchema.optional(), to: dateSchema.optional() });
+
+const listQuery = z.object({
+  from: dateSchema.optional(),
+  to: dateSchema.optional(),
+  page: z.coerce.number().int().positive().optional(),
+  pageSize: z.coerce.number().int().positive().max(10000).optional(),
+  search: z.string().trim().max(100).optional(),
+  sortBy: z.enum(['periodStart', 'generatedKwh', 'consumedKwh']).optional().default('periodStart'),
+  sortDir: z.enum(['asc', 'desc']).optional().default('asc')
+});
+
+const csvExportQuery = z.object({
+  from: dateSchema.optional(),
+  to: dateSchema.optional(),
+  columns: z.string().trim().optional()
+});
 const summaryQuery = listQuery.extend({ electricityRateInrPerKwh: electricityRateSchema.optional() });
 const comparisonQuery = z.object({ from: dateSchema, to: dateSchema, electricityRateInrPerKwh: electricityRateSchema.optional() });
 
@@ -46,13 +66,46 @@ router.post('/buildings', asyncRoute(async (req, res) => {
 router.get('/buildings/:buildingId/readings', asyncRoute(async (req, res) => {
   const buildingId = validate(idSchema, req.params.buildingId);
   await requireBuildingMember(req.userId, buildingId);
-  const { from, to } = validate(listQuery, req.query);
-  if (from && to && Date.parse(from) >= Date.parse(to)) return res.status(400).json({ error: { message: 'from must be before to' } });
-  const rows = await prisma.energyPeriod.findMany({
-    where: { buildingId, ...(from || to ? { periodStart: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lt: new Date(to) } : {}) } } : {}) },
-    orderBy: { periodStart: 'asc' }
-  });
-  res.json({ data: rows });
+  const query = validate(listQuery, req.query);
+  const { from, to, page, pageSize, search, sortBy, sortDir } = query;
+  if (from && to && Date.parse(from) >= Date.parse(to)) {
+    return res.status(400).json({ error: { message: 'from must be before to' } });
+  }
+
+  const where = {
+    buildingId,
+    ...(from || to ? { periodStart: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lt: new Date(to) } : {}) } } : {}),
+    ...(search ? {
+      OR: [
+        { source: { equals: search.toUpperCase() in ['MANUAL', 'IMPORT', 'API'] ? search.toUpperCase() : undefined } },
+      ].filter(cond => Object.values(cond)[0] !== undefined)
+    } : {})
+  };
+
+  const total = await prisma.energyPeriod.count({ where });
+
+  const orderBy = { [sortBy]: sortDir };
+  const findOptions = {
+    where,
+    orderBy,
+    ...(pageSize ? { skip: (page - 1) * pageSize, take: pageSize } : {})
+  };
+
+  const rows = await prisma.energyPeriod.findMany(findOptions);
+
+  if (pageSize) {
+    res.json({
+      data: rows,
+      pagination: {
+        total,
+        page: page || 1,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+      }
+    });
+  } else {
+    res.json({ data: rows, pagination: { total, page: 1, pageSize: total, totalPages: 1 } });
+  }
 }));
 
 router.post('/buildings/:buildingId/readings', asyncRoute(async (req, res) => {
@@ -116,8 +169,19 @@ router.get('/buildings/comparison', asyncRoute(async (req, res) => {
 router.get('/buildings/:buildingId/readings.csv', asyncRoute(async (req, res) => {
   const buildingId = validate(idSchema, req.params.buildingId);
   await requireBuildingMember(req.userId, buildingId);
-  const rows = await prisma.energyPeriod.findMany({ where: { buildingId }, orderBy: { periodStart: 'asc' } });
-  const csv = serializeReadingCsv(rows);
+  const { from, to, columns } = validate(csvExportQuery, req.query);
+  if (from && to && Date.parse(from) >= Date.parse(to)) {
+    return res.status(400).json({ error: { message: 'from must be before to' } });
+  }
+
+  const where = {
+    buildingId,
+    ...(from || to ? { periodStart: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lt: new Date(to) } : {}) } } : {})
+  };
+
+  const rows = await prisma.energyPeriod.findMany({ where, orderBy: { periodStart: 'asc' } });
+  const selectedCols = columns ? columns.split(',').map(s => s.trim()) : undefined;
+  const csv = serializeReadingCsv(rows, selectedCols);
   res.type('text/csv').attachment(`building-${buildingId}-readings.csv`).send(csv);
 }));
 
@@ -127,11 +191,25 @@ router.post('/buildings/:buildingId/readings.csv', asyncRoute(async (req, res) =
   const raw = typeof req.body === 'string' ? req.body : req.body?.csv;
   if (typeof raw !== 'string' || raw.length > 2_000_000) return res.status(400).json({ error: { message: 'Provide CSV text in the csv field (maximum 2 MB)' } });
   const parsed = parseReadingCsv(raw);
-  const created = await prisma.$transaction(parsed.map(r => prisma.energyPeriod.create({ data: {
-    buildingId, periodStart: new Date(r.periodStart), periodEnd: new Date(r.periodEnd), generatedKwh: r.generatedKwh,
-    consumedKwh: r.consumedKwh, gridImportKwh: r.gridImportKwh ?? null,
-    batteryChargeKwh: r.batteryChargeKwh ?? null, batteryDischargeKwh: r.batteryDischargeKwh ?? null,
-    source: r.source, recordedByUserId: req.userId
-  } })));
-  res.status(201).json({ data: { imported: created.length } });
+  
+  // High-performance batch insertion with skipDuplicates
+  const insertPayload = parsed.map(r => ({
+    buildingId,
+    periodStart: new Date(r.periodStart),
+    periodEnd: new Date(r.periodEnd),
+    generatedKwh: r.generatedKwh,
+    consumedKwh: r.consumedKwh,
+    gridImportKwh: r.gridImportKwh ?? null,
+    batteryChargeKwh: r.batteryChargeKwh ?? null,
+    batteryDischargeKwh: r.batteryDischargeKwh ?? null,
+    source: r.source,
+    recordedByUserId: req.userId
+  }));
+
+  const created = await prisma.energyPeriod.createMany({
+    data: insertPayload,
+    skipDuplicates: true
+  });
+
+  res.status(201).json({ data: { imported: created.count } });
 }));

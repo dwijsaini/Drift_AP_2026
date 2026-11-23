@@ -190,16 +190,17 @@ All IDs are positive integer strings in JSON. Energy metrics are returned in kWh
 | Method and path | Access | Purpose |
 |---|---|---|
 | `GET /health` | Public | API and database health status. |
+| `GET /docs` | Public | Interactive API documentation reference page. |
 | `GET /api/buildings` | Member | List caller's accessible buildings and assigned roles. |
 | `POST /api/buildings` | Signed-in user | Create building and assign caller as `OWNER`. Body: `{ "name", "address?", "timezone?" }`. |
-| `GET /api/buildings/:buildingId/readings?from=&to=` | Member | List interval readings ordered chronologically; optional ISO bounds. |
+| `GET /api/buildings/:buildingId/readings?from=&to=&page=&pageSize=&sortBy=&sortDir=&search=` | Member | List interval readings with server-side pagination, search, bounds, and sorting. |
 | `POST /api/buildings/:buildingId/readings` | OWNER/EDITOR | Record new interval reading. Body conforms to `readingSchema`. |
 | `PATCH /api/buildings/:buildingId/readings/:readingId` | OWNER/EDITOR | Partially update reading fields while verifying interval ordering. |
 | `DELETE /api/buildings/:buildingId/readings/:readingId` | OWNER/EDITOR | Delete specific interval reading. |
-| `GET /api/buildings/:buildingId/summaries/:granularity?from=&to=` | Member | Retrieve aggregated energy metrics. `:granularity` must be `daily`, `weekly`, or `monthly`. |
+| `GET /api/buildings/:buildingId/summaries/:granularity?from=&to=&electricityRateInrPerKwh=` | Member | Retrieve aggregated energy metrics. `:granularity` must be `daily`, `weekly`, or `monthly`. |
 | `GET /api/buildings/comparison?from=&to=&electricityRateInrPerKwh=` | Member | Compare totals for all caller-accessible buildings over the same range. Rate is optional. |
-| `GET /api/buildings/:buildingId/readings.csv` | Member | Export all building readings as downloadable CSV. |
-| `POST /api/buildings/:buildingId/readings.csv` | OWNER/EDITOR | Bulk import readings via CSV payload atomically in a single transaction. |
+| `GET /api/buildings/:buildingId/readings.csv?from=&to=&columns=` | Member | Export building readings as CSV with optional date bounds and column chooser. |
+| `POST /api/buildings/:buildingId/readings.csv` | OWNER/EDITOR | Bulk import readings via CSV payload atomically using batch insertion. |
 
 The CSV import/export routes are shared by both features: import validates the exact header order and applies the JSON reading constraints (period duration and kWh limits included); blank optional meter fields remain `null`. Export emits those same headers. Reading or exporting requires membership; import requires OWNER or EDITOR. It accepts JSON `{ "csv": "..." }`, 1–10,000 rows, and a 2 MB payload limit.
 

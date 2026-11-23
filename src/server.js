@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prisma } from './db.js';
+import { renderDocsHtml } from './docsHtml.js';
 import { errorMiddleware } from './http.js';
 import { router } from './routes.js';
 
@@ -14,6 +15,9 @@ app.get('/health', async (_req, res, next) => {
     await prisma.$queryRaw`SELECT 1`;
     res.json({ status: 'ok', database: 'ok' });
   } catch (error) { next(error); }
+});
+app.get('/docs', (_req, res) => {
+  res.type('html').send(renderDocsHtml());
 });
 app.use('/api', router);
 const frontendDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../frontend');

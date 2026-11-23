@@ -7,17 +7,24 @@ export const CSV_READING_HEADERS = [
   'batteryChargeKwh', 'batteryDischargeKwh', 'source'
 ];
 
-export function serializeReadingCsv(readings) {
-  return stringify(readings.map(reading => ({
-    periodStart: reading.periodStart.toISOString(),
-    periodEnd: reading.periodEnd.toISOString(),
-    generatedKwh: reading.generatedKwh.toString(),
-    consumedKwh: reading.consumedKwh.toString(),
-    gridImportKwh: reading.gridImportKwh?.toString() ?? '',
-    batteryChargeKwh: reading.batteryChargeKwh?.toString() ?? '',
-    batteryDischargeKwh: reading.batteryDischargeKwh?.toString() ?? '',
-    source: reading.source
-  })), { header: true, columns: CSV_READING_HEADERS });
+export function serializeReadingCsv(readings, columns = CSV_READING_HEADERS) {
+  const selectedColumns = Array.isArray(columns) && columns.length > 0
+    ? columns.filter(c => CSV_READING_HEADERS.includes(c))
+    : CSV_READING_HEADERS;
+  const activeCols = selectedColumns.length > 0 ? selectedColumns : CSV_READING_HEADERS;
+
+  return stringify(readings.map(reading => {
+    const row = {};
+    if (activeCols.includes('periodStart')) row.periodStart = reading.periodStart instanceof Date ? reading.periodStart.toISOString() : new Date(reading.periodStart).toISOString();
+    if (activeCols.includes('periodEnd')) row.periodEnd = reading.periodEnd instanceof Date ? reading.periodEnd.toISOString() : new Date(reading.periodEnd).toISOString();
+    if (activeCols.includes('generatedKwh')) row.generatedKwh = reading.generatedKwh.toString();
+    if (activeCols.includes('consumedKwh')) row.consumedKwh = reading.consumedKwh.toString();
+    if (activeCols.includes('gridImportKwh')) row.gridImportKwh = reading.gridImportKwh?.toString() ?? '';
+    if (activeCols.includes('batteryChargeKwh')) row.batteryChargeKwh = reading.batteryChargeKwh?.toString() ?? '';
+    if (activeCols.includes('batteryDischargeKwh')) row.batteryDischargeKwh = reading.batteryDischargeKwh?.toString() ?? '';
+    if (activeCols.includes('source')) row.source = reading.source;
+    return row;
+  }), { header: true, columns: activeCols });
 }
 
 export function parseReadingCsv(text) {

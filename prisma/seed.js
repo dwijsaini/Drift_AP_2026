@@ -9,8 +9,8 @@ const prisma = new PrismaClient();
 
 /**
  * Generate realistic hourly EnergyPeriod data for a residential solar home.
- * Solar generation peaks midday (~4.5 kWh at noon) using a sine-wave.
- * Consumption is flat-ish, slightly higher in evenings.
+ * Solar generation peaks midday (~12:00-13:00 IST) using a sine-wave.
+ * Strictly 0 generation during nighttime (19:00 - 06:00).
  *
  * @param {bigint} buildingId
  * @param {Date}   startDate   First hour (inclusive)
@@ -22,22 +22,39 @@ function generateHomeReadings(buildingId, startDate, hours) {
   for (let h = 0; h < hours; h++) {
     const periodStart = new Date(startDate.getTime() + h * 3_600_000);
     const periodEnd   = new Date(periodStart.getTime() + 3_600_000);
-    const hour = periodStart.getUTCHours(); // 0-23 in UTC (seed data in UTC)
+    
+    // Calculate local hour in Asia/Kolkata (UTC + 5.5 hours)
+    const istTime = new Date(periodStart.getTime() + (5.5 * 3600 * 1000));
+    const localHour = istTime.getUTCHours();
+    const dayIndex = Math.floor(h / 24);
 
-    // Solar generation: sine wave peaking at noon (hour 12 UTC ≈ 17:30 IST)
-    // Peak ~4.5 kWh, zero before 6am and after 19pm
+    // Weather condition variation per day: sunny (0.9-1.0), partly cloudy (0.55-0.75), overcast (0.25-0.45)
+    const weatherVariations = [0.95, 0.90, 0.65, 0.35];
+    const weatherFactor = weatherVariations[dayIndex % weatherVariations.length];
+
+    // Solar generation: sine wave peaking at local noon (12:30 IST)
     let generatedKwh = 0;
-    if (hour >= 6 && hour <= 19) {
-      const angle = Math.PI * (hour - 6) / 13;      // 0..π over daylight hours
-      const rawPeak = 4.5 + 0.3 * Math.sin(h * 0.07); // slight day-to-day variation
-      generatedKwh = Math.max(0, rawPeak * Math.sin(angle));
+    if (localHour >= 6 && localHour <= 18) {
+      const angle = Math.PI * (localHour - 6) / 12.0;
+      const peakSolar = 4.8 * weatherFactor;
+      generatedKwh = Math.max(0, peakSolar * Math.sin(angle));
     }
 
-    // Consumption: base ~1.4 kWh/h with higher evening usage (18-22h)
-    const eveningBoost = hour >= 18 && hour <= 22 ? 0.9 : 0;
-    const morningBoost = hour >= 7 && hour <= 9 ? 0.5 : 0;
-    const noise = 0.15 * Math.sin(h * 1.3 + 0.5); // deterministic pseudo-noise
-    const consumedKwh = Math.max(0.3, 1.4 + eveningBoost + morningBoost + noise);
+    // Residential consumption:
+    // Low night baseload (~0.6 kWh)
+    // Morning wake-up bump 7-9 AM (~2.2 kWh)
+    // Low daytime ~1.1 kWh
+    // Evening cooking & lighting 18-22 (~3.2 kWh)
+    let base = 0.6;
+    if (localHour >= 7 && localHour <= 9) base = 2.2;
+    else if (localHour >= 10 && localHour <= 17) base = 1.1;
+    else if (localHour >= 18 && localHour <= 22) base = 3.2;
+
+    const pseudoNoise = 0.15 * Math.sin(h * 1.37 + 0.4);
+    const consumedKwh = Math.max(0.35, base + pseudoNoise);
+
+    const netDeficit = Math.max(0, consumedKwh - generatedKwh);
+    const netSurplus = Math.max(0, generatedKwh - consumedKwh);
 
     rows.push({
       buildingId,
@@ -45,6 +62,9 @@ function generateHomeReadings(buildingId, startDate, hours) {
       periodEnd,
       generatedKwh: parseFloat(generatedKwh.toFixed(3)),
       consumedKwh:  parseFloat(consumedKwh.toFixed(3)),
+      gridImportKwh: parseFloat(netDeficit.toFixed(3)),
+      batteryChargeKwh: parseFloat((netSurplus * 0.7).toFixed(3)),
+      batteryDischargeKwh: parseFloat((netDeficit * 0.4).toFixed(3)),
       source: 'API',
     });
   }
@@ -53,8 +73,8 @@ function generateHomeReadings(buildingId, startDate, hours) {
 
 /**
  * Generate realistic hourly EnergyPeriod data for a commercial office tower.
- * Higher consumption during business hours (8am-6pm), low at night.
- * Higher solar capacity: peaks up to 12 kWh at noon.
+ * Higher consumption during business hours (8am-6pm), low at night and weekends.
+ * Higher solar capacity: peaks up to 14.5 kWh at noon.
  *
  * @param {bigint} buildingId
  * @param {Date}   startDate
@@ -66,23 +86,33 @@ function generateOfficeReadings(buildingId, startDate, hours) {
   for (let h = 0; h < hours; h++) {
     const periodStart = new Date(startDate.getTime() + h * 3_600_000);
     const periodEnd   = new Date(periodStart.getTime() + 3_600_000);
-    const hour = periodStart.getUTCHours();
+    
+    // Local hour in Asia/Kolkata
+    const istTime = new Date(periodStart.getTime() + (5.5 * 3600 * 1000));
+    const localHour = istTime.getUTCHours();
+    const dayIndex = Math.floor(h / 24);
 
-    // Solar: larger array, peak ~12 kWh
+    const weatherVariations = [0.92, 0.88, 0.55, 0.40];
+    const weatherFactor = weatherVariations[dayIndex % weatherVariations.length];
+
+    // Solar: commercial rooftop array, peak ~14.5 kWh
     let generatedKwh = 0;
-    if (hour >= 6 && hour <= 19) {
-      const angle = Math.PI * (hour - 6) / 13;
-      const rawPeak = 12.0 + 0.5 * Math.sin(h * 0.05);
-      generatedKwh = Math.max(0, rawPeak * Math.sin(angle));
+    if (localHour >= 6 && localHour <= 18) {
+      const angle = Math.PI * (localHour - 6) / 12.0;
+      const peakSolar = 14.5 * weatherFactor;
+      generatedKwh = Math.max(0, peakSolar * Math.sin(angle));
     }
 
-    // Office consumption: heavy during business hours
-    const isBusinessHour = hour >= 8 && hour <= 18;
-    const baseConsumption = isBusinessHour ? 5.5 : 0.8;
-    const lunchDip = hour === 13 ? -1.0 : 0;                    // slight dip at lunch
-    const morningRamp = hour === 8 ? -1.5 : 0;                   // warming up
-    const noise = 0.4 * Math.sin(h * 0.9 + 1.2);
-    const consumedKwh = Math.max(0.4, baseConsumption + lunchDip + morningRamp + noise);
+    // Office consumption: heavy during 8 AM – 6 PM
+    const isBusinessHour = localHour >= 8 && localHour <= 18;
+    const baseConsumption = isBusinessHour ? 8.5 : 1.2;
+    const lunchDip = localHour === 13 ? -1.2 : 0;
+    const morningRamp = localHour === 8 ? -2.0 : 0;
+    const noise = 0.3 * Math.sin(h * 0.91 + 1.1);
+    const consumedKwh = Math.max(0.5, baseConsumption + lunchDip + morningRamp + noise);
+
+    const netDeficit = Math.max(0, consumedKwh - generatedKwh);
+    const netSurplus = Math.max(0, generatedKwh - consumedKwh);
 
     rows.push({
       buildingId,
@@ -90,6 +120,9 @@ function generateOfficeReadings(buildingId, startDate, hours) {
       periodEnd,
       generatedKwh: parseFloat(generatedKwh.toFixed(3)),
       consumedKwh:  parseFloat(consumedKwh.toFixed(3)),
+      gridImportKwh: parseFloat(netDeficit.toFixed(3)),
+      batteryChargeKwh: parseFloat((netSurplus * 0.6).toFixed(3)),
+      batteryDischargeKwh: parseFloat((netDeficit * 0.5).toFixed(3)),
       source: 'API',
     });
   }
@@ -165,6 +198,8 @@ try {
 
   const homeRows   = generateHomeReadings(homeBuilding.buildingId, seedStart, NUM_HOURS);
   const officeRows = generateOfficeReadings(officeBuilding.buildingId, seedStart, NUM_HOURS);
+
+  await prisma.energyPeriod.deleteMany({});
 
   const homeResult = await prisma.energyPeriod.createMany({
     data: homeRows,
