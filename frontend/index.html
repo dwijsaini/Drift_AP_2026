@@ -1,104 +1,827 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f4f7f3">
-  <title>Drift — Solar balance</title>
+  <meta name="theme-color" content="#0d1117">
+  <title>Drift — Solar Balance Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="app.js"></script>
 </head>
 <body>
-  <div class="shell">
-    <aside class="sidebar">
-      <a class="brand" href="#top" aria-label="Drift home"><span class="brand-mark">d</span><span>drift<span class="brand-dot">.</span></span></a>
-      <div class="workspace-label">WORKSPACE</div>
-      <label class="building-picker"><span class="building-icon">⌂</span><span><small>BUILDING</small><select id="building-select" aria-label="Select building"></select></span></label><button id="manage-building" class="text-button" type="button">Manage building</button>
-      <nav class="nav-links" aria-label="Main navigation">
-        <a class="nav-link active" href="#overview"><span>◫</span> Overview</a>
-        <a class="nav-link" href="#readings"><span>⌁</span> Readings</a>
-      </nav>
-      <div class="sidebar-bottom"><div class="sun-mark">☼</div><p>Small readings.<br><strong>Clearer energy decisions.</strong></p><span class="prototype-tag">FIRST STAGE PREVIEW</span></div>
-    </aside>
+  <div class="app-shell">
+    <!-- Sticky 48px Topbar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="btn-mobile-menu" class="topbar-btn mobile-menu-btn" aria-label="Toggle navigation menu" aria-expanded="false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </button>
+        <a class="brand" href="#dashboard" aria-label="Drift Solar Balance Home">
+          <span class="brand-mark">☼</span>
+          <span>Drift</span>
+        </a>
+        <div id="mode-pill" class="mode-pill">
+          <span id="mode-dot" class="status-dot local"></span>
+          <span id="mode-label">Preview mode</span>
+        </div>
+        <div class="segmented-switch" role="tablist" aria-label="Operating Mode">
+          <button id="switch-mode-browser" class="segmented-btn active" role="tab" aria-selected="true">Browser</button>
+          <button id="switch-mode-api" class="segmented-btn" role="tab" aria-selected="false">API</button>
+        </div>
+      </div>
 
-    <main id="top" class="main-content">
-      <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> <strong id="crumb-building">My home</strong></span><span id="mode-status" class="local-badge"><i></i> Saved on this device</span></header>
-      <p id="app-error" class="form-error" role="alert" hidden></p>
+      <div class="topbar-right">
+        <button id="btn-command-palette" class="topbar-btn" aria-label="Open command palette (Ctrl+K or Cmd+K)" title="Command palette (Ctrl+K)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <span class="visually-hidden">Search or Command</span>
+        </button>
+        <button id="btn-theme-toggle" class="topbar-btn" aria-label="Toggle light or dark theme" title="Toggle theme">
+          <span id="theme-icon">☾</span>
+        </button>
+        <button id="btn-notifications" class="topbar-btn" aria-label="Notifications" aria-expanded="false" title="Notifications">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span id="unread-count" class="badge-unread" hidden>0</span>
+        </button>
+        <div id="user-chip" class="user-chip" title="Current session identity">
+          <span class="status-dot"></span>
+          <span id="user-name">Local Guest</span>
+          <span id="user-role-tag" class="role-tag">Owner</span>
+        </div>
+      </div>
+    </header>
 
-      <section id="overview" class="intro">
-        <div><p class="eyebrow">SOLAR BALANCE MONITOR</p><h1>Energy, in balance.</h1><p class="intro-copy">See how your solar generation is keeping pace with the energy you use.</p></div>
-        <button id="add-reading-top" class="button button-dark" type="button"><span>＋</span> Add reading</button>
-      </section>
+    <div class="main-wrapper">
+      <div id="drawer-backdrop" class="drawer-backdrop" aria-hidden="true"></div>
 
-      <section class="summary-grid" aria-label="Energy summary">
-        <article class="summary-card"><div class="card-top"><span>GENERATED</span><span class="card-icon solar">☼</span></div><div class="metric"><strong id="total-generated">0.0</strong><span>kWh</span></div><p class="card-note">Solar energy produced</p></article>
-        <article class="summary-card"><div class="card-top"><span>CONSUMED</span><span class="card-icon usage">⌁</span></div><div class="metric"><strong id="total-consumed">0.0</strong><span>kWh</span></div><p class="card-note">Energy used by building</p></article>
-        <article class="summary-card balance-card"><div class="card-top"><span>ENERGY BALANCE</span><span class="card-icon balance">↗</span></div><div class="metric"><strong id="total-balance">0.0</strong><span>kWh</span></div><p id="balance-note" class="card-note">Generation minus consumption</p></article>
-        <article class="summary-card coverage-card"><div class="card-top"><span>SOLAR COVERAGE</span><span class="card-icon coverage">◉</span></div><div class="metric"><strong id="solar-coverage">—</strong><span id="coverage-unit">%</span></div><p class="card-note">Share of use covered by solar</p></article>
-      </section>
+      <!-- 220px Left Sidebar -->
+      <aside id="sidebar" class="sidebar" aria-label="Main sidebar navigation">
+        <nav class="sidebar-nav">
+          <div>
+            <div class="sidebar-group-title">Monitor</div>
+            <a class="nav-item active" href="#dashboard" data-section="dashboard">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+              <span>Dashboard</span>
+            </a>
+            <a class="nav-item" href="#readings-section" data-section="readings">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+              <span>Readings</span>
+            </a>
+            <a class="nav-item" href="#generation-section" data-section="generation">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+              <span>Generation</span>
+            </a>
+          </div>
 
-      <section id="advanced-tools" class="panel advanced-panel" aria-labelledby="advanced-heading">
-        <div class="panel-heading"><div><p class="eyebrow">ENERGY INSIGHTS</p><h2 id="advanced-heading">More ways to understand your data</h2></div></div>
-        <div class="advanced-grid">
-          <label>Grid electricity rate
-            <span class="rate-input"><input id="electricity-rate" type="number" min="0" max="1000" step="0.01" placeholder="e.g. 8.25"><span>INR / kWh</span></span>
-          </label>
-          <div class="advanced-metric"><span>ESTIMATED GRID COST</span><strong id="estimated-grid-cost">—</strong><small id="grid-cost-note">Enter a rate and add grid-import readings.</small></div>
-          <div class="csv-controls" id="csv-controls">
-            <button id="export-csv" class="button button-dark" type="button">Export CSV</button>
-            <label class="button button-green import-button">Import CSV<input id="import-csv" type="file" accept=".csv,text/csv" hidden></label>
+          <div>
+            <div class="sidebar-group-title">Analysis</div>
+            <a class="nav-item" href="#trends-section" data-section="trends">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+              <span>Trends</span>
+            </a>
+            <a class="nav-item" href="#cost-section" data-section="cost">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+              <span>Cost &amp; Tariffs</span>
+            </a>
+            <a class="nav-item" href="#compare-section" data-section="compare">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+              <span>Compare</span>
+            </a>
+            <a class="nav-item" href="#goals-section" data-section="goals">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+              <span>Goals</span>
+            </a>
+            <a class="nav-item" href="#insights-section" data-section="insights">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6M10 22h4"/></svg>
+              <span>Insights</span>
+            </a>
+          </div>
+
+          <div>
+            <div class="sidebar-group-title">Data</div>
+            <button id="sidebar-import-btn" class="nav-item btn-text" style="width:100%;text-align:left;">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              <span>Import CSV</span>
+            </button>
+            <button id="sidebar-export-btn" class="nav-item btn-text" style="width:100%;text-align:left;">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              <span>Export CSV</span>
+            </button>
+            <button id="sidebar-report-btn" class="nav-item btn-text" style="width:100%;text-align:left;">
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+              <span>Print report</span>
+            </button>
+          </div>
+        </nav>
+
+        <!-- Active Building Card at bottom of sidebar -->
+        <div class="active-building-card">
+          <div class="building-card-header">
+            <span>Active building</span>
+            <span id="sidebar-role-badge" class="role-badge owner">Owner</span>
+          </div>
+          <select id="building-select" class="building-select" aria-label="Select active building"></select>
+          <div class="building-card-footer">
+            <span id="building-tz" class="mono" style="font-size:0.75rem;color:var(--text-dim)">UTC</span>
+            <button id="btn-add-building" class="btn-text" type="button" style="font-size:0.75rem;">+ New</button>
           </div>
         </div>
-        <p id="advanced-status" class="form-error" role="status" hidden></p>
-        <div class="advanced-lower">
-          <div>
-            <h3>Compare buildings</h3>
-            <p class="form-help">Compare accessible buildings over the selected building’s recorded date range.</p>
-            <button id="compare-buildings" class="button button-dark" type="button">Compare buildings</button>
-            <div id="comparison-results" class="comparison-results" hidden></div>
+      </aside>
+
+      <!-- Main Area -->
+      <main id="main-content" class="main-content" role="main">
+        <!-- Page Header -->
+        <div class="page-header">
+          <div class="header-title-group">
+            <h1 id="page-title">Solar balance</h1>
+            <p id="page-subtitle">Tracking energy balance for <strong id="header-building-name">My home</strong> · <span id="header-range-name">October 2026</span></p>
           </div>
-          <div>
-            <h3>What-if planner</h3>
-            <p class="form-help">Explore a hypothetical increase in solar generation. This does not change saved readings.</p>
-            <label class="scenario-control">Assumed generation increase: <strong id="scenario-percent">0%</strong>
-              <input id="scenario-increase" type="range" min="0" max="100" step="5" value="0">
-            </label>
-            <p id="scenario-result" class="scenario-result"></p>
+
+          <div class="header-actions">
+            <!-- Day / Week / Month Segmented Control -->
+            <div class="segmented-switch" role="tablist" aria-label="Date granularity">
+              <button id="range-daily" class="segmented-btn active" role="tab" aria-selected="true" data-range="daily">Day</button>
+              <button id="range-weekly" class="segmented-btn" role="tab" aria-selected="false" data-range="weekly">Week</button>
+              <button id="range-monthly" class="segmented-btn" role="tab" aria-selected="false" data-range="monthly">Month</button>
+            </div>
+
+            <button id="btn-load-demo" class="btn btn-secondary" type="button" title="Load realistic weather-varied demo data">
+              <span>⚡ Load demo data</span>
+            </button>
+
+            <button id="btn-import-header" class="btn btn-secondary" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              <span>Import</span>
+            </button>
+
+            <button id="btn-add-reading-primary" class="btn btn-primary" type="button">
+              <span>＋ Add reading</span>
+            </button>
           </div>
         </div>
-      </section>
 
-      <section class="content-grid">
-        <article class="panel trend-panel">
-          <div class="panel-heading"><div><p class="eyebrow">YOUR ENERGY STORY</p><h2>Generation &amp; use</h2></div><label class="select-wrap"><span class="visually-hidden">Trend range</span><select id="range-select"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="all">All readings</option></select></label></div>
-          <div class="chart-legend"><span><i class="legend-generated"></i> Generated</span><span><i class="legend-consumed"></i> Consumed</span></div>
-          <div id="chart-empty" class="chart-empty"><span class="empty-sun">☼</span><p>Your energy story starts here.</p><span>Add a reading to see generation and use over time.</span></div>
-          <div id="chart-wrap" class="chart-wrap" hidden><canvas id="energy-chart" role="img" aria-label="Bar chart comparing generated and consumed energy"></canvas><div id="chart-labels" class="chart-labels"></div></div>
-          <div id="completeness-alert" class="alert" hidden><span>!</span><p id="completeness-message"></p></div>
-          <div id="worsening-alert" class="alert" hidden><span>↗</span><p><strong>The gap is widening.</strong> Consumption has exceeded generation and the gap has grown for three periods in a row.</p></div>
-        </article>
+        <!-- Global Message / Error Banner -->
+        <div id="banner-error" class="alert-bar deficit" role="alert" hidden>
+          <div class="alert-content">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span id="banner-error-text">An error occurred</span>
+          </div>
+          <button id="banner-error-dismiss" class="btn-text" type="button" aria-label="Dismiss error">✕</button>
+        </div>
 
-        <article class="panel add-panel" id="reading-form-panel">
-          <div class="panel-heading"><div><p class="eyebrow">LOG ENERGY</p><h2 id="reading-form-title">Add a reading</h2></div><span class="form-spark">✳</span></div>
-          <p class="form-help">Enter start and end times in the building’s time zone. The end is exclusive; for example, 10:00 to 11:00.</p>
-          <form id="reading-form">
-            <div class="field-row"><label>From<input name="periodStart" type="datetime-local" required></label><label>To<input name="periodEnd" type="datetime-local" required></label></div>
-            <label>Energy generated <span class="unit-label">kWh</span><input name="generatedKwh" type="number" min="0" step="0.001" placeholder="e.g. 18.4" required></label>
-            <label>Energy consumed <span class="unit-label">kWh</span><input name="consumedKwh" type="number" min="0" step="0.001" placeholder="e.g. 22.7" required></label>
-            <details class="optional-fields"><summary>Grid &amp; battery (optional)</summary><div class="optional-grid"><label>Grid import (kWh)<input name="gridImportKwh" type="number" min="0" step="0.001" placeholder="—"></label><label>Battery charged (kWh)<input name="batteryChargeKwh" type="number" min="0" step="0.001" placeholder="—"></label><label>Battery discharged (kWh)<input name="batteryDischargeKwh" type="number" min="0" step="0.001" placeholder="—"></label></div></details>
-            <button id="reading-submit" class="button button-green" type="submit">Save reading →</button>
-            <button id="cancel-edit" class="text-button" type="button" hidden>Cancel edit</button>
-          </form>
-        </article>
-      </section>
+        <!-- Dismissible Alert Bar for Missing Hourly Readings -->
+        <div id="gap-alert-bar" class="alert-bar" role="status" hidden>
+          <div class="alert-content">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span id="gap-alert-message">Notice: 3 missing hourly interval readings detected.</span>
+          </div>
+          <div class="alert-actions">
+            <button id="btn-view-gaps" class="btn btn-secondary" type="button" style="padding:2px 8px;font-size:0.8rem;">View gaps</button>
+            <button id="btn-dismiss-gap" class="btn-text" type="button" aria-label="Dismiss gap alert">✕</button>
+          </div>
+        </div>
 
-      <section id="readings" class="panel readings-panel">
-        <div class="panel-heading"><div><p class="eyebrow">RECENT ACTIVITY</p><h2>Your readings</h2></div><button id="clear-data" class="text-button" type="button">Clear local data</button></div>
-        <div class="table-scroll"><table><thead><tr><th>PERIOD</th><th>GENERATED</th><th>CONSUMED</th><th>BALANCE</th><th>COVERAGE</th><th>ACTIONS</th></tr></thead><tbody id="readings-body"></tbody></table></div>
-        <div id="table-empty" class="table-empty">No readings yet. Add your first time period above.</div>
-      </section>
-      <footer><span>Drift · Solar Balance Monitor</span><span>First-stage browser preview · data stays on this device</span></footer>
-    </main>
+        <!-- Stat Grid (auto-fill, min 180px) -->
+        <section class="stat-grid" aria-label="Key energy balance metrics">
+          <!-- 1. Generated -->
+          <article class="stat-card" id="card-generated">
+            <div class="stat-header">
+              <span>GENERATED</span>
+              <span class="stat-icon solar">☼</span>
+            </div>
+            <div class="stat-value mono">
+              <span id="stat-generated-val">0.0</span>
+              <span class="stat-unit">kWh</span>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progress-generated" class="progress-bar" style="width:0%"></div>
+            </div>
+            <div id="delta-generated" class="stat-delta">
+              <span>Solar generation in period</span>
+            </div>
+          </article>
+
+          <!-- 2. Consumed -->
+          <article class="stat-card" id="card-consumed">
+            <div class="stat-header">
+              <span>CONSUMED</span>
+              <span class="stat-icon consume">⌁</span>
+            </div>
+            <div class="stat-value mono">
+              <span id="stat-consumed-val">0.0</span>
+              <span class="stat-unit">kWh</span>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progress-consumed" class="progress-bar consume" style="width:0%"></div>
+            </div>
+            <div id="delta-consumed" class="stat-delta">
+              <span>Total energy demand</span>
+            </div>
+          </article>
+
+          <!-- 3. Balance -->
+          <article class="stat-card" id="card-balance">
+            <div class="stat-header">
+              <span>BALANCE</span>
+              <span class="stat-icon surplus" id="stat-balance-icon">↗</span>
+            </div>
+            <div class="stat-value mono">
+              <span id="stat-balance-val">0.0</span>
+              <span class="stat-unit">kWh</span>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progress-balance" class="progress-bar surplus" style="width:0%"></div>
+            </div>
+            <div id="delta-balance" class="stat-delta">
+              <span id="stat-balance-note">Generation minus use</span>
+            </div>
+          </article>
+
+          <!-- 4. Coverage (with Semicircle Dial Gauge) -->
+          <article class="stat-card" id="card-coverage">
+            <div class="stat-header">
+              <span>COVERAGE</span>
+              <span class="stat-icon" id="stat-coverage-icon">◉</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div class="stat-value mono">
+                <span id="stat-coverage-val">—</span>
+                <span class="stat-unit" id="stat-coverage-unit">%</span>
+              </div>
+              <div id="coverage-dial-container" style="width:64px;height:36px;" aria-hidden="true">
+                <!-- Inline SVG Dial Gauge -->
+                <svg viewBox="0 0 100 55" width="64" height="36">
+                  <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="var(--surface-2)" stroke-width="10" stroke-linecap="round"/>
+                  <path id="coverage-dial-arc" d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="var(--solar)" stroke-width="10" stroke-linecap="round" stroke-dasharray="125.6" stroke-dashoffset="125.6" style="transition:stroke-dashoffset 0.8s ease;"/>
+                </svg>
+              </div>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progress-coverage" class="progress-bar" style="width:0%"></div>
+            </div>
+            <div class="stat-delta">
+              <span>Self-consumption coverage</span>
+            </div>
+          </article>
+
+          <!-- 5. Estimated Grid Cost -->
+          <article class="stat-card" id="card-cost">
+            <div class="stat-header">
+              <span>ESTIMATED GRID COST</span>
+              <span class="stat-icon">₹</span>
+            </div>
+            <div class="stat-value mono">
+              <span id="stat-cost-val">—</span>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progress-cost" class="progress-bar consume" style="width:0%"></div>
+            </div>
+            <div class="stat-delta">
+              <span id="stat-cost-note">Estimate from recorded import only</span>
+            </div>
+          </article>
+
+          <!-- 6. Grid Import -->
+          <article class="stat-card" id="card-import">
+            <div class="stat-header">
+              <span>GRID IMPORT</span>
+              <span class="stat-icon consume">⚡</span>
+            </div>
+            <div class="stat-value mono">
+              <span id="stat-import-val">0.0</span>
+              <span class="stat-unit">kWh</span>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progress-import" class="progress-bar consume" style="width:0%"></div>
+            </div>
+            <div class="stat-delta">
+              <span id="stat-import-note">Recorded external grid draw</span>
+            </div>
+          </article>
+        </section>
+
+        <!-- Large Combined Chart Panel -->
+        <section id="trends-section" class="card-panel">
+          <div class="card-title-row">
+            <div>
+              <h2>Generation, consumption &amp; balance</h2>
+              <p class="card-subtitle">Solar production vs. facility demand with net balance overlay</p>
+            </div>
+            <div class="chart-legend">
+              <div class="legend-item"><span class="legend-swatch solar"></span> Generated (kWh)</div>
+              <div class="legend-item"><span class="legend-swatch consume"></span> Consumed (kWh)</div>
+              <div class="legend-item"><span class="legend-swatch balance"></span> Net balance</div>
+            </div>
+          </div>
+
+          <div class="chart-container" id="chart-container">
+            <div id="chart-empty-state" class="chart-empty" style="text-align:center;padding:48px 16px;color:var(--text-muted);" hidden>
+              <p style="font-size:1.1rem;margin-bottom:6px;">No interval readings logged for this view.</p>
+              <p style="font-size:0.85rem;">Add a reading or click "Load demo data" to explore trends.</p>
+            </div>
+            <svg id="combined-chart-svg" class="chart-svg" role="img" aria-label="Combined solar generation, consumption, and balance chart"></svg>
+            <div id="chart-tooltip" class="chart-tooltip" role="tooltip" aria-hidden="true"></div>
+          </div>
+        </section>
+
+        <!-- Two-Column Row: What-If Planner & Building Comparison -->
+        <section class="two-col-grid">
+          <!-- What-If Scenario Panel (Solar + Battery Storage) -->
+          <article class="card-panel" id="what-if-panel">
+            <div class="card-title-row">
+              <div>
+                <h2>What-if scenario planner</h2>
+                <p class="card-subtitle">Simulate higher solar capacity or battery storage (scenarios are never saved)</p>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div style="display:flex;justify-content:space-between;">
+                <label for="slider-solar-increase">Hypothetical solar increase:</label>
+                <strong id="label-solar-percent" class="mono" style="color:var(--solar)">+0%</strong>
+              </div>
+              <input id="slider-solar-increase" type="range" min="0" max="100" step="5" value="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            </div>
+
+            <div class="form-group">
+              <div style="display:flex;justify-content:space-between;">
+                <label for="slider-battery-capacity">Added battery storage capacity:</label>
+                <strong id="label-battery-kwh" class="mono" style="color:var(--consume)">0.0 kWh</strong>
+              </div>
+              <input id="slider-battery-capacity" type="range" min="0" max="50" step="2" value="0" aria-valuemin="0" aria-valuemax="50" aria-valuenow="0">
+            </div>
+
+            <div id="scenario-summary-box" style="padding:12px;background:var(--surface-2);border-radius:var(--radius-control);border:1px solid var(--border-muted);font-size:0.85rem;">
+              <p id="scenario-projected-text">Adjust sliders above to test solar expansion or battery storage scenarios.</p>
+            </div>
+          </article>
+
+          <!-- Building Comparison Panel with Sparklines -->
+          <article class="card-panel" id="compare-section">
+            <div class="card-title-row">
+              <div>
+                <h2>Building comparison</h2>
+                <p class="card-subtitle">Performance across accessible buildings (weakest performer flagged)</p>
+              </div>
+              <button id="btn-refresh-compare" class="btn btn-secondary" type="button" style="padding:3px 8px;font-size:0.75rem;">Refresh</button>
+            </div>
+
+            <div id="compare-table-wrap" class="table-container" style="border:none;">
+              <table class="data-table" id="compare-table">
+                <thead>
+                  <tr>
+                    <th>Building</th>
+                    <th>Coverage</th>
+                    <th>Balance</th>
+                    <th>7-Day Trend</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="compare-tbody">
+                  <tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:24px;">Loading accessible buildings...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- Peak-Hours Heatmap (7x24 Grid) -->
+        <section class="card-panel" id="heatmap-panel">
+          <div class="card-title-row">
+            <div>
+              <h2>Peak-hours balance heatmap</h2>
+              <p class="card-subtitle">Hourly energy balance across 7 days of the week (solar surplus vs. grid deficit)</p>
+            </div>
+            <div class="chart-legend" style="font-size:0.78rem;">
+              <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:var(--deficit);border-radius:2px;"></span> Deficit</span>
+              <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:var(--surface-2);border-radius:2px;"></span> Neutral</span>
+              <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:12px;height:12px;background:var(--solar);border-radius:2px;"></span> Surplus</span>
+            </div>
+          </div>
+
+          <div style="overflow-x:auto;">
+            <div id="heatmap-grid-container" style="min-width:600px;padding:8px 0;" role="grid" aria-label="7 by 24 hourly balance heatmap"></div>
+          </div>
+        </section>
+
+        <!-- Goals & Tiered Tariff Row -->
+        <section class="two-col-grid" id="goals-tariff-row">
+          <!-- Goals Panel -->
+          <article class="card-panel" id="goals-section">
+            <div class="card-title-row">
+              <div>
+                <h2>Building targets &amp; goals</h2>
+                <p class="card-subtitle">Track targets with automatic on-track / at-risk projections</p>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:14px;">
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:0.85rem;">
+                  <span>Coverage target (<span id="goal-target-cov-num">80</span>%):</span>
+                  <strong id="goal-cov-status" class="mono">On track</strong>
+                </div>
+                <div class="progress-track" style="height:8px;">
+                  <div id="goal-cov-bar" class="progress-bar surplus" style="width:0%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:0.85rem;">
+                  <span>Monthly surplus target (<span id="goal-target-surplus-num">150</span> kWh):</span>
+                  <strong id="goal-surplus-status" class="mono">At risk</strong>
+                </div>
+                <div class="progress-track" style="height:8px;">
+                  <div id="goal-surplus-bar" class="progress-bar" style="width:0%"></div>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:10px;align-items:center;">
+                <label style="font-size:0.8rem;color:var(--text-muted);">Target coverage %:
+                  <input id="input-goal-coverage" type="number" min="10" max="100" value="80" style="width:65px;padding:3px 6px;margin-left:4px;border:1px solid var(--border-muted);border-radius:var(--radius-control);background:var(--surface-2);color:var(--text);">
+                </label>
+                <label style="font-size:0.8rem;color:var(--text-muted);">Surplus target kWh:
+                  <input id="input-goal-surplus" type="number" min="0" max="5000" value="150" style="width:75px;padding:3px 6px;margin-left:4px;border:1px solid var(--border-muted);border-radius:var(--radius-control);background:var(--surface-2);color:var(--text);">
+                </label>
+                <button id="btn-save-goals" class="btn btn-secondary" style="padding:3px 10px;font-size:0.8rem;" type="button">Save</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- Tiered Tariff Calculator -->
+          <article class="card-panel" id="cost-section">
+            <div class="card-title-row">
+              <div>
+                <h2>Tiered tariff calculator</h2>
+                <p class="card-subtitle">User-editable slabs (<span style="color:var(--solar)">example slabs, edit to match your DISCOM bill</span>)</p>
+              </div>
+              <div class="segmented-switch">
+                <button id="btn-tariff-slab" class="segmented-btn active" type="button">Slabs</button>
+                <button id="btn-tariff-flat" class="segmented-btn" type="button">Flat</button>
+              </div>
+            </div>
+
+            <div id="slab-container" style="display:flex;flex-direction:column;gap:8px;">
+              <table class="data-table" style="font-size:0.8rem;">
+                <thead>
+                  <tr>
+                    <th>From (kWh)</th>
+                    <th>To (kWh)</th>
+                    <th>Rate (₹/kWh)</th>
+                  </tr>
+                </thead>
+                <tbody id="slab-tbody">
+                  <!-- Slabs rendered via JS -->
+                </tbody>
+              </table>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85rem;margin-top:6px;">
+                <span>Total bill from slabs:</span>
+                <strong id="slab-total-cost" class="mono" style="font-size:1.1rem;color:var(--text);">₹0.00</strong>
+              </div>
+            </div>
+
+            <div id="flat-container" style="display:none;flex-direction:column;gap:8px;">
+              <label style="font-size:0.85rem;color:var(--text-muted);">Flat grid rate (₹ / kWh):
+                <input id="input-flat-rate" type="number" min="0" max="1000" step="0.05" value="8.25" style="width:100px;padding:4px 8px;margin-left:6px;border:1px solid var(--border-muted);border-radius:var(--radius-control);background:var(--surface-2);color:var(--text);">
+              </label>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85rem;margin-top:6px;">
+                <span>Total bill at flat rate:</span>
+                <strong id="flat-total-cost" class="mono" style="font-size:1.1rem;color:var(--text);">₹0.00</strong>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <!-- Plain-Language Insights & CO2 Avoided Panel -->
+        <section class="card-panel" id="insights-section">
+          <div class="card-title-row">
+            <div>
+              <h2>Automated insights &amp; environmental impact</h2>
+              <p class="card-subtitle">Deterministic rule-based findings from recorded interval data</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:0.8rem;color:var(--text-muted);">
+              <span>Grid factor:</span>
+              <input id="input-emission-factor" type="number" min="0.1" max="1.5" step="0.01" value="0.716" style="width:70px;padding:2px 6px;border:1px solid var(--border-muted);border-radius:var(--radius-control);background:var(--surface-2);color:var(--text);">
+              <span title="CEA CO2 Baseline Database for the Indian Power Sector">kg CO₂/kWh (CEA)</span>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="insights-grid">
+            <div class="stat-card" style="background:var(--surface-2);">
+              <div style="font-size:0.75rem;color:var(--text-muted);">ESTIMATED CO₂ AVOIDED</div>
+              <div class="mono" style="font-size:1.4rem;font-weight:600;color:var(--surplus);margin:4px 0;">
+                <span id="insight-co2-val">0.0</span> <span style="font-size:0.85rem;">kg CO₂</span>
+              </div>
+              <p style="font-size:0.75rem;color:var(--text-dim);">Estimated solar clean generation offset</p>
+            </div>
+
+            <div class="stat-card" style="background:var(--surface-2);">
+              <div style="font-size:0.75rem;color:var(--text-muted);">PEAK SOLAR WINDOW</div>
+              <div class="mono" style="font-size:1.1rem;font-weight:600;color:var(--solar);margin:4px 0;" id="insight-peak-window">
+                11:00 AM – 2:00 PM
+              </div>
+              <p style="font-size:0.75rem;color:var(--text-dim);" id="insight-peak-note">Optimal window for heavy appliances</p>
+            </div>
+
+            <div class="stat-card" style="background:var(--surface-2);">
+              <div style="font-size:0.75rem;color:var(--text-muted);">MAXIMUM DEFICIT INTERVAL</div>
+              <div class="mono" style="font-size:1.1rem;font-weight:600;color:var(--deficit);margin:4px 0;" id="insight-deficit-period">
+                —
+              </div>
+              <p style="font-size:0.75rem;color:var(--text-dim);" id="insight-deficit-note">Highest unmet consumption gap</p>
+            </div>
+
+            <div class="stat-card" style="background:var(--surface-2);">
+              <div style="font-size:0.75rem;color:var(--text-muted);">MISSED GENERATION FROM GAPS</div>
+              <div class="mono" style="font-size:1.1rem;font-weight:600;color:var(--text-muted);margin:4px 0;" id="insight-gap-loss">
+                0.0 kWh
+              </div>
+              <p style="font-size:0.75rem;color:var(--text-dim);">Estimated potential solar unrecorded</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Readings Table Section -->
+        <section id="readings-section" class="card-panel">
+          <div class="card-title-row">
+            <div>
+              <h2>Interval energy readings</h2>
+              <p class="card-subtitle">Granular interval data with completeness and solar balance tracking</p>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button id="btn-export-table" class="btn btn-secondary" type="button">Export CSV</button>
+              <button id="btn-add-reading-table" class="btn btn-primary" type="button">+ Add reading</button>
+            </div>
+          </div>
+
+          <!-- Table Controls Toolbar -->
+          <div class="table-toolbar">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <div class="toolbar-search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <input id="input-table-search" type="search" placeholder="Search date or source..." aria-label="Search readings">
+              </div>
+
+              <div style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-muted);">
+                <label for="filter-date-from">From:</label>
+                <input id="filter-date-from" type="date" style="padding:4px 6px;border:1px solid var(--border-muted);border-radius:var(--radius-control);background:var(--surface-2);color:var(--text);">
+                <label for="filter-date-to">To:</label>
+                <input id="filter-date-to" type="date" style="padding:4px 6px;border:1px solid var(--border-muted);border-radius:var(--radius-control);background:var(--surface-2);color:var(--text);">
+                <button id="btn-apply-filter" class="btn btn-secondary" style="padding:4px 8px;font-size:0.75rem;" type="button">Filter</button>
+                <button id="btn-clear-filter" class="btn-text" style="font-size:0.75rem;" type="button">Reset</button>
+              </div>
+            </div>
+
+            <div class="pagination-controls">
+              <span id="pagination-info">Showing 1-20 of 0</span>
+              <div class="segmented-switch">
+                <button id="page-prev" class="segmented-btn" type="button" aria-label="Previous page">‹</button>
+                <button id="page-next" class="segmented-btn" type="button" aria-label="Next page">›</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table" id="readings-table">
+              <thead>
+                <tr>
+                  <th class="sortable" data-sort="periodStart">Period <span id="sort-icon-period">↕</span></th>
+                  <th class="sortable" data-sort="generatedKwh">Generated <span id="sort-icon-gen">↕</span></th>
+                  <th class="sortable" data-sort="consumedKwh">Consumed <span id="sort-icon-con">↕</span></th>
+                  <th class="sortable" data-sort="balance">Balance <span id="sort-icon-bal">↕</span></th>
+                  <th>Coverage</th>
+                  <th>Completeness</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="readings-tbody">
+                <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted);">No readings recorded. Add your first reading above.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Footer -->
+        <footer style="margin-top:24px;padding:16px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:0.8rem;color:var(--text-dim);">
+          <div>
+            <strong>Drift</strong> · Solar Balance Monitor · Capstone Project
+          </div>
+          <div id="footer-mode-text">
+            Browser preview · data stored locally on this device
+          </div>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Add / Edit Reading Modal Dialog -->
+  <div id="modal-reading" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-reading-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-reading-title">Add reading</h3>
+        <button id="btn-close-reading-modal" class="btn-text" type="button" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="form-reading">
+        <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+          Times are aligned with building timezone (<strong id="modal-building-tz">UTC</strong>).
+        </p>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="reading-start">Period start</label>
+            <input id="reading-start" name="periodStart" type="datetime-local" required>
+          </div>
+          <div class="form-group">
+            <label for="reading-end">Period end (exclusive)</label>
+            <input id="reading-end" name="periodEnd" type="datetime-local" required>
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-top:12px;">
+          <div class="form-group">
+            <label for="reading-gen">Generated (kWh)</label>
+            <input id="reading-gen" name="generatedKwh" type="number" min="0" step="0.001" placeholder="e.g. 4.250" required>
+          </div>
+          <div class="form-group">
+            <label for="reading-con">Consumed (kWh)</label>
+            <input id="reading-con" name="consumedKwh" type="number" min="0" step="0.001" placeholder="e.g. 2.100" required>
+          </div>
+        </div>
+
+        <details style="margin-top:14px;border:1px solid var(--border);border-radius:var(--radius-control);padding:8px 12px;background:var(--surface-2);">
+          <summary style="font-size:0.82rem;font-weight:500;cursor:pointer;color:var(--text-muted);">Optional meter details (grid &amp; battery)</summary>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;">
+            <div class="form-group">
+              <label for="reading-grid">Grid import</label>
+              <input id="reading-grid" name="gridImportKwh" type="number" min="0" step="0.001" placeholder="0.0">
+            </div>
+            <div class="form-group">
+              <label for="reading-bat-chg">Battery charge</label>
+              <input id="reading-bat-chg" name="batteryChargeKwh" type="number" min="0" step="0.001" placeholder="0.0">
+            </div>
+            <div class="form-group">
+              <label for="reading-bat-dis">Battery discharge</label>
+              <input id="reading-bat-dis" name="batteryDischargeKwh" type="number" min="0" step="0.001" placeholder="0.0">
+            </div>
+          </div>
+        </details>
+
+        <p id="reading-form-error" style="color:var(--deficit);font-size:0.82rem;margin-top:10px;" hidden></p>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
+          <button id="btn-cancel-reading" class="btn btn-secondary" type="button">Cancel</button>
+          <button id="btn-submit-reading" class="btn btn-primary" type="submit">Save reading</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Building Modal Dialog -->
+  <div id="modal-building" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-building-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-building-title">Create building</h3>
+        <button id="btn-close-building-modal" class="btn-text" type="button" aria-label="Close modal">✕</button>
+      </div>
+
+      <form id="form-building">
+        <div class="form-group">
+          <label for="building-name">Building name</label>
+          <input id="building-name" name="name" type="text" placeholder="e.g. Rooftop Solar Villa" required maxlength="200">
+        </div>
+
+        <div class="form-group" style="margin-top:12px;">
+          <label for="building-address">Address (optional)</label>
+          <input id="building-address" name="address" type="text" placeholder="e.g. 42 Sunshine Road, Bengaluru" maxlength="500">
+        </div>
+
+        <div class="form-group" style="margin-top:12px;">
+          <label for="building-timezone">Timezone</label>
+          <select id="building-timezone" name="timezone">
+            <option value="Asia/Kolkata">Asia/Kolkata (IST +05:30)</option>
+            <option value="UTC">UTC (+00:00)</option>
+            <option value="America/New_York">America/New_York (EST/EDT)</option>
+            <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+            <option value="Europe/London">Europe/London (GMT/BST)</option>
+            <option value="Europe/Berlin">Europe/Berlin (CET/CEST)</option>
+            <option value="Asia/Tokyo">Asia/Tokyo (JST +09:00)</option>
+          </select>
+        </div>
+
+        <p id="building-form-error" style="color:var(--deficit);font-size:0.82rem;margin-top:10px;" hidden></p>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px;">
+          <button id="btn-cancel-building" class="btn btn-secondary" type="button">Cancel</button>
+          <button id="btn-submit-building" class="btn btn-primary" type="submit">Create building</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Export CSV Modal with Date-Range Picker and Column Chooser -->
+  <div id="modal-export" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-export-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-export-title">Export CSV readings</h3>
+        <button id="btn-close-export-modal" class="btn-text" type="button" aria-label="Close modal">✕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="export-from">From date (optional):</label>
+            <input id="export-from" type="date">
+          </div>
+          <div class="form-group">
+            <label for="export-to">To date (optional):</label>
+            <input id="export-to" type="date">
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:0.82rem;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">Columns to include:</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.85rem;">
+            <label><input type="checkbox" id="col-start" checked disabled> periodStart (required)</label>
+            <label><input type="checkbox" id="col-end" checked disabled> periodEnd (required)</label>
+            <label><input type="checkbox" id="col-gen" checked disabled> generatedKwh (required)</label>
+            <label><input type="checkbox" id="col-con" checked disabled> consumedKwh (required)</label>
+            <label><input type="checkbox" id="col-grid" checked> gridImportKwh</label>
+            <label><input type="checkbox" id="col-batchg" checked> batteryChargeKwh</label>
+            <label><input type="checkbox" id="col-batdis" checked> batteryDischargeKwh</label>
+            <label><input type="checkbox" id="col-src" checked> source</label>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+          <button id="btn-cancel-export" class="btn btn-secondary" type="button">Cancel</button>
+          <button id="btn-confirm-export" class="btn btn-primary" type="button">Download CSV</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import CSV Modal with validation feedback -->
+  <div id="modal-import" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-import-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-import-title">Import CSV readings</h3>
+        <button id="btn-close-import-modal" class="btn-text" type="button" aria-label="Close modal">✕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <p style="font-size:0.82rem;color:var(--text-muted);">
+          Select a CSV file containing interval readings. Header row must include <code>periodStart,periodEnd,generatedKwh,consumedKwh...</code>
+        </p>
+
+        <input type="file" id="input-csv-file" accept=".csv,text/csv" style="padding:10px;border:1px dashed var(--border-muted);border-radius:var(--radius-control);background:var(--surface-2);">
+
+        <div id="import-feedback" style="font-size:0.82rem;color:var(--text);padding:8px;border-radius:var(--radius-control);display:none;"></div>
+
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+          <button id="btn-cancel-import" class="btn btn-secondary" type="button">Cancel</button>
+          <button id="btn-confirm-import" class="btn btn-primary" type="button" disabled>Import CSV</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Command Palette Dialog (Cmd/Ctrl+K) -->
+  <div id="modal-palette" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="palette-title">
+    <div class="modal-content" style="max-width:560px;padding:16px;">
+      <h2 id="palette-title" class="visually-hidden">Command Palette</h2>
+      <div class="toolbar-search" style="border:none;background:var(--surface-2);margin-bottom:12px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="palette-search-input" type="search" placeholder="Type a command or jump to building..." aria-label="Command search" style="width:100%;font-size:1rem;padding:6px;">
+        <kbd style="font-size:0.75rem;padding:2px 6px;border-radius:3px;background:var(--border);color:var(--text-muted);">ESC</kbd>
+      </div>
+
+      <div id="palette-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;" role="listbox" aria-label="Command suggestions">
+        <!-- Rendered items -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Center Drawer / Popover -->
+  <div id="notifications-panel" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="notif-title">
+    <div class="modal-content" style="position:fixed;top:54px;right:16px;max-width:380px;margin:0;">
+      <div class="modal-header">
+        <h3 id="notif-title">Notifications</h3>
+        <div style="display:flex;gap:6px;">
+          <button id="btn-mark-all-read" class="btn-text" style="font-size:0.75rem;" type="button">Mark all read</button>
+          <button id="btn-close-notif" class="btn-text" type="button" aria-label="Close notifications">✕</button>
+        </div>
+      </div>
+
+      <div id="notifications-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+        <!-- Rendered notifications -->
+      </div>
+    </div>
   </div>
 </body>
 </html>
